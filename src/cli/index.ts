@@ -11,10 +11,11 @@ const runtimeVersion = typeof Bun !== 'undefined'
   ? (Bun as any).version 
   : process.version;
 
-// Package info - hardcoded for standalone executable
+// Package info - dynamically read from package.json
+import packageJsonFile from '../../package.json' assert { type: 'json' };
 const packageJson = {
-  version: '0.1.4',
-  name: '@pinata/grapevine-sdk'
+  version: packageJsonFile.version,
+  name: packageJsonFile.name
 };
 
 // Initialize CLI

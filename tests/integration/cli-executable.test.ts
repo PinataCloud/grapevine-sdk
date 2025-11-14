@@ -89,7 +89,7 @@ describe('CLI Executable Tests', () => {
   describe('Basic Commands', () => {
     it('should show version', async () => {
       const result = await runCLI(['--version']);
-      expect(result.stdout).toContain('0.1.0');
+      expect(result.stdout).toContain('0.1.4');
       expect(result.code).toBe(0);
     });
 
