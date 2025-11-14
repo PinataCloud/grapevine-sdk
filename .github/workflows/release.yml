@@ -1,0 +1,231 @@
+name: Release SDK & CLI
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  build-sdk:
+    name: Build and Test SDK
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        registry-url: 'https://registry.npmjs.org'
+    
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+    
+    - name: Install dependencies
+      run: bun install
+    
+    - name: Build SDK
+      run: bun run build
+    
+    - name: Create tarball
+      run: npm pack
+    
+    - name: Upload SDK package
+      uses: actions/upload-artifact@v3
+      with:
+        name: sdk-package
+        path: '*.tgz'
+        retention-days: 7
+
+  build-cli-executables:
+    name: Build CLI for ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            target: linux
+          - os: macos-latest
+            platform: macos-x64
+            target: macos-x64
+          - os: macos-latest
+            platform: macos-arm64
+            target: macos-arm
+          - os: windows-latest
+            platform: windows
+            target: windows
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+    
+    - name: Install dependencies
+      run: bun install
+    
+    - name: Build TypeScript
+      run: bun run build
+    
+    - name: Build CLI executable
+      run: bun run build:cli:${{ matrix.target }}
+    
+    - name: Create archive (Unix)
+      if: runner.os != 'Windows'
+      run: |
+        cd dist/bin
+        if [ "${{ matrix.platform }}" == "macos-arm64" ]; then
+          tar -czf grapevine-cli-${{ matrix.platform }}.tar.gz grapevine-macos-arm64
+        elif [ "${{ matrix.platform }}" == "macos-x64" ]; then
+          tar -czf grapevine-cli-${{ matrix.platform }}.tar.gz grapevine-macos-x64
+        else
+          tar -czf grapevine-cli-${{ matrix.platform }}.tar.gz grapevine-${{ matrix.platform }}
+        fi
+    
+    - name: Create archive (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cd dist\bin
+        Compress-Archive -Path grapevine-windows.exe -DestinationPath grapevine-cli-windows.zip
+    
+    - name: Upload CLI executable
+      uses: actions/upload-artifact@v3
+      with:
+        name: cli-${{ matrix.platform }}
+        path: dist/bin/grapevine-cli-${{ matrix.platform }}.*
+        retention-days: 7
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-sdk, build-cli-executables]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts/
+    
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        
+        # Copy SDK package
+        cp artifacts/sdk-package/*.tgz release-assets/
+        
+        # Copy CLI executables
+        find artifacts -name "grapevine-cli-*" -type f -exec cp {} release-assets/ \;
+        
+        # List all assets
+        ls -la release-assets/
+    
+    - name: Extract version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Create Release Notes
+      run: |
+        cat > release-notes.md << EOF
+        # Grapevine SDK & CLI Release v${{ steps.version.outputs.VERSION }}
+        
+        ## 📦 SDK Package
+        - NPM Package: \`@grapevine/sdk@${{ steps.version.outputs.VERSION }}\`
+        - Install: \`npm install @grapevine/sdk@${{ steps.version.outputs.VERSION }}\`
+        
+        ## 🖥️ CLI Executables
+        Available for:
+        - Linux (x64)
+        - macOS (x64 & ARM64)
+        - Windows (x64)
+        
+        ### Installation
+        
+        #### macOS/Linux
+        \`\`\`bash
+        # Download the appropriate binary for your platform
+        curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/grapevine-cli-[platform].tar.gz -o grapevine-cli.tar.gz
+        tar -xzf grapevine-cli.tar.gz
+        chmod +x grapevine-cli
+        sudo mv grapevine-cli /usr/local/bin/
+        \`\`\`
+        
+        #### Windows
+        Download the Windows executable and add to your PATH.
+        
+        ## What's Changed
+        See the [full changelog](https://github.com/${{ github.repository }}/compare/v${{ steps.version.outputs.VERSION }}...v${{ steps.version.outputs.VERSION }})
+        
+        ---
+        *Built with GitHub Actions*
+        EOF
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.version.outputs.VERSION }}
+        name: Release v${{ steps.version.outputs.VERSION }}
+        body_path: release-notes.md
+        draft: false
+        prerelease: false
+        files: release-assets/*
+        fail_on_unmatched_files: true
+
+  publish-npm:
+    name: Publish to NPM
+    needs: create-release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        registry-url: 'https://registry.npmjs.org'
+    
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+    
+    - name: Install dependencies
+      run: bun install
+    
+    - name: Build SDK
+      run: bun run build
+    
+    - name: Configure NPM
+      run: |
+        echo "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" > ~/.npmrc
+    
+    - name: Publish to NPM
+      run: npm publish --access public
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    
+    - name: Verify publication
+      run: |
+        sleep 10
+        npm view @grapevine/sdk version

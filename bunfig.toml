@@ -1,0 +1,28 @@
+# Bun configuration for testing and development
+
+[test]
+# Root directory for tests
+root = "./tests"
+
+# Enable coverage reporting
+coverage = true
+
+# Coverage reporters
+coverageReporter = ["text", "lcov"]
+
+# Test timeout in milliseconds
+timeout = 5000
+
+# Watch mode settings
+watchMode = false
+
+[install]
+# Package manager settings
+lockfile = true
+save = true
+
+[build]
+# Build settings for the CLI
+target = "bun"
+minify = true
+sourcemap = true

@@ -1,0 +1,65 @@
+{
+  "name": "@grapevine/sdk",
+  "version": "0.1.0",
+  "description": "Easy-to-use SDK for the Grapevine API - Create and manage content feeds with x402 micropayments",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "bin": {
+    "grapevine": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:cli": "bun build ./src/cli/index.ts --compile --minify --sourcemap --outfile grapevine-cli",
+    "build:cli:all": "npm run build:cli:macos-x64 && npm run build:cli:macos-arm && npm run build:cli:linux && npm run build:cli:windows",
+    "build:cli:macos-x64": "bun build ./src/cli/index.ts --compile --target=bun-darwin-x64 --minify --outfile dist/bin/grapevine-macos-x64",
+    "build:cli:macos-arm": "bun build ./src/cli/index.ts --compile --target=bun-darwin-arm64 --minify --outfile dist/bin/grapevine-macos-arm64",
+    "build:cli:linux": "bun build ./src/cli/index.ts --compile --target=bun-linux-x64 --minify --outfile dist/bin/grapevine-linux",
+    "build:cli:windows": "bun build ./src/cli/index.ts --compile --target=bun-windows-x64 --minify --outfile dist/bin/grapevine-windows.exe",
+    "build:all": "npm run build && npm run build:cli",
+    "dev": "tsc --watch",
+    "test": "bun test",
+    "test:node": "NODE_OPTIONS='--experimental-vm-modules --no-warnings' jest",
+    "test:cli": "npm run build:cli && npm run test:cli:exec",
+    "test:cli:exec": "./grapevine-cli --version && ./grapevine-cli --help && ./grapevine-cli info",
+    "test:all": "npm run test:bun && npm run test:cli",
+    "test:bun": "bun test",
+    "test:integration": "bun test tests/integration/",
+    "test:e2e": "bun test tests/e2e/ --timeout 60000 --verbose",
+    "test:e2e:sdk": "bun test tests/e2e/sdk-e2e.test.ts --timeout 60000 --verbose",
+    "test:e2e:cli": "bun test tests/e2e/cli-e2e.test.ts --timeout 60000 --verbose",
+    "example": "bun run examples/basic-usage.ts",
+    "prepublishOnly": "npm run build:all"
+  },
+  "keywords": [
+    "grapevine",
+    "api",
+    "sdk",
+    "x402",
+    "micropayments",
+    "content",
+    "feeds",
+    "base",
+    "web3"
+  ],
+  "dependencies": {
+    "viem": "^2.39.0",
+    "@coinbase/x402": "^0.7.1",
+    "x402": "^0.7.1",
+    "commander": "^11.0.0",
+    "mime-types": "^2.1.35"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/mime-types": "^2.1.4",
+    "typescript": "^5.0.0",
+    "@types/bun": "latest",
+    "@jest/globals": "^29.7.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.5.0"
+  }
+}

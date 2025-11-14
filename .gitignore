@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+*.lcov
+.nyc_output/
+
+# Production build
+dist/
+build/
+out/
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*.bak
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Package manager
+.npm
+.yarn-integrity
+
+# TypeScript
+*.tsbuildinfo
+.tscache/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Logs
+logs/
+*.log
+
+# OS files
+Thumbs.db
+
+# Bun
+bun.lockb
+.bun/
+
+# CLI executable (built version)
+grapevine-cli
+grapevine-cli.map
+*.exe
+
+# Test artifacts
+test-*.ts
+test-*.js
+test-results/
+playwright-report/
+playwright/.cache/
