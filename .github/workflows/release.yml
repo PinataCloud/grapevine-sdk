@@ -13,7 +13,7 @@ on:
 
 jobs:
   build-sdk:
-    name: Build and Test SDK
+    name: Build SDK
     runs-on: ubuntu-latest
     
     steps:
@@ -23,7 +23,6 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20.x'
-        registry-url: 'https://registry.npmjs.org'
     
     - name: Setup Bun
       uses: oven-sh/setup-bun@v1
@@ -37,13 +36,14 @@ jobs:
       run: bun run build
     
     - name: Create tarball
-      run: npm pack
+      run: |
+        tar -czf grapevine-sdk-${{ github.ref_name }}.tar.gz dist/ package.json README.md
     
     - name: Upload SDK package
       uses: actions/upload-artifact@v4
       with:
         name: sdk-package
-        path: '*.tgz'
+        path: '*.tar.gz'
         retention-days: 7
 
   build-cli-executables:
@@ -127,7 +127,7 @@ jobs:
         mkdir -p release-assets
         
         # Copy SDK package
-        cp artifacts/sdk-package/*.tgz release-assets/
+        cp artifacts/sdk-package/*.tar.gz release-assets/
         
         # Copy CLI executables
         find artifacts -name "grapevine-cli-*" -type f -exec cp {} release-assets/ \;
@@ -150,8 +150,8 @@ jobs:
         # Grapevine SDK & CLI Release v${{ steps.version.outputs.VERSION }}
         
         ## 📦 SDK Package
-        - NPM Package: \`@grapevine/sdk@${{ steps.version.outputs.VERSION }}\`
-        - Install: \`npm install @grapevine/sdk@${{ steps.version.outputs.VERSION }}\`
+        - TypeScript/JavaScript SDK for Grapevine API
+        - Download the tarball from the release assets
         
         ## 🖥️ CLI Executables
         Available for:
@@ -190,42 +190,3 @@ jobs:
         prerelease: false
         files: release-assets/*
         fail_on_unmatched_files: true
-
-  publish-npm:
-    name: Publish to NPM
-    needs: create-release
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        registry-url: 'https://registry.npmjs.org'
-    
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v1
-      with:
-        bun-version: latest
-    
-    - name: Install dependencies
-      run: bun install
-    
-    - name: Build SDK
-      run: bun run build
-    
-    - name: Configure NPM
-      run: |
-        echo "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" > ~/.npmrc
-    
-    - name: Publish to NPM
-      run: npm publish --access public
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-    
-    - name: Verify publication
-      run: |
-        sleep 10
-        npm view @grapevine/sdk version
