@@ -61,7 +61,7 @@ describe('Grapevine CLI', () => {
   describe('version', () => {
     it('should display version', async () => {
       const result = await runCommand(['--version']);
-      expect(result.stdout).toContain('0.1.4');
+      expect(result.stdout).toContain('0.1.5');
       expect(result.code).toBe(0);
     });
   });
