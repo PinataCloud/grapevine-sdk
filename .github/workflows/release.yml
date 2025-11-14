@@ -12,9 +12,13 @@ on:
         type: string
 
 jobs:
-  build-sdk:
-    name: Build SDK
+  publish-sdk:
+    name: Publish SDK to npm
     runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
     
     steps:
     - uses: actions/checkout@v4
@@ -23,6 +27,7 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20.x'
+        registry-url: 'https://registry.npmjs.org'
     
     - name: Setup Bun
       uses: oven-sh/setup-bun@v1
@@ -35,7 +40,13 @@ jobs:
     - name: Build SDK
       run: bun run build
     
-    - name: Create tarball
+    - name: Run tests
+      run: bun test
+    
+    - name: Publish to npm
+      run: npm publish
+    
+    - name: Create tarball for GitHub release
       run: |
         tar -czf grapevine-sdk-${{ github.ref_name }}.tar.gz dist/ package.json README.md
     
@@ -45,6 +56,49 @@ jobs:
         name: sdk-package
         path: '*.tar.gz'
         retention-days: 7
+
+  publish-cli:
+    name: Publish CLI to npm
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        registry-url: 'https://registry.npmjs.org'
+    
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+    
+    - name: Install dependencies
+      run: bun install
+    
+    - name: Build TypeScript
+      run: bun run build
+    
+    - name: Build CLI for Linux (npm default)
+      run: bun run build:cli:linux
+    
+    - name: Prepare CLI package
+      run: |
+        mkdir -p cli-npm-package
+        cp dist/bin/grapevine-linux cli-npm-package/grapevine
+        chmod +x cli-npm-package/grapevine
+        cp cli-package.json cli-npm-package/package.json
+        cp README.md cli-npm-package/
+    
+    - name: Publish CLI to npm
+      working-directory: cli-npm-package
+      run: npm publish
 
   build-cli-executables:
     name: Build CLI for ${{ matrix.platform }}
@@ -109,7 +163,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-sdk, build-cli-executables]
+    needs: [publish-sdk, publish-cli, build-cli-executables]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -150,16 +204,22 @@ jobs:
         # Grapevine SDK & CLI Release v${{ steps.version.outputs.VERSION }}
         
         ## 📦 SDK Package
-        - TypeScript/JavaScript SDK for Grapevine API
-        - Download the tarball from the release assets
+        - **npm**: \`npm install @pinata/grapevine-sdk\`
+        - **GitHub**: Download the tarball from release assets
+        - TypeScript/JavaScript SDK for Grapevine API with wagmi integration
         
-        ## 🖥️ CLI Executables
-        Available for:
+        ## 🖥️ CLI 
+        ### npm Installation (Recommended)
+        \`\`\`bash
+        npm install -g @pinata/grapevine-cli
+        # Then use: grapevine --help
+        \`\`\`
+        
+        ### Direct Binary Download
+        Available for all platforms:
         - Linux (x64)
-        - macOS (x64 & ARM64)
+        - macOS (x64 & ARM64) 
         - Windows (x64)
-        
-        ### Installation
         
         #### macOS/Linux
         \`\`\`bash

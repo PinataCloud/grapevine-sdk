@@ -18,13 +18,13 @@ Easy-to-use SDK for the Grapevine API. Create and manage content feeds with buil
 
 ```bash
 # Using Bun
-bun add @grapevine/sdk
+bun add @pinata/grapevine-sdk
 
 # Using npm
-npm install @grapevine/sdk
+npm install @pinata/grapevine-sdk
 
 # Using yarn
-yarn add @grapevine/sdk
+yarn add @pinata/grapevine-sdk
 ```
 
 ## Quick Start
@@ -32,7 +32,7 @@ yarn add @grapevine/sdk
 ### Private Key Authentication (Node.js)
 
 ```typescript
-import { GrapevineClient } from '@grapevine/sdk';
+import { GrapevineClient } from '@pinata/grapevine-sdk';
 
 // Initialize the SDK
 const grapevine = new GrapevineClient({
@@ -61,7 +61,7 @@ console.log(`Entry created: ${entry.id}`);
 ### React + wagmi Integration
 
 ```tsx
-import { useGrapevine } from '@grapevine/sdk/react';
+import { useGrapevine } from '@pinata/grapevine-sdk/react';
 import { useAccount, useWalletClient } from 'wagmi';
 
 function MyComponent() {
@@ -113,8 +113,8 @@ const grapevine = new GrapevineClient({
 ### wagmi Integration Configuration
 
 ```typescript
-import { GrapevineClient } from '@grapevine/sdk';
-import { WagmiAdapter } from '@grapevine/sdk/adapters';
+import { GrapevineClient } from '@pinata/grapevine-sdk';
+import { WagmiAdapter } from '@pinata/grapevine-sdk/adapters';
 
 const wagmiAdapter = new WagmiAdapter(walletClient, address);
 const grapevine = new GrapevineClient({
@@ -329,7 +329,7 @@ The SDK provides React hooks for seamless integration with wagmi-based applicati
 ### useGrapevine Hook
 
 ```tsx
-import { useGrapevine } from '@grapevine/sdk/react';
+import { useGrapevine } from '@pinata/grapevine-sdk/react';
 import { useAccount, useWalletClient } from 'wagmi';
 
 function MyApp() {
@@ -357,7 +357,7 @@ function MyApp() {
 
 ```tsx
 import React, { useState, useEffect } from 'react';
-import { useGrapevine } from '@grapevine/sdk/react';
+import { useGrapevine } from '@pinata/grapevine-sdk/react';
 import { useAccount, useWalletClient } from 'wagmi';
 
 function FeedManager() {
@@ -441,9 +441,9 @@ The SDK includes a command-line interface for quick operations.
 
 ### Installation
 ```bash
-npm install -g @grapevine/sdk
+npm install -g @pinata/grapevine-sdk
 # or
-bun add -g @grapevine/sdk
+bun add -g @pinata/grapevine-sdk
 ```
 
 ### Authentication
@@ -571,7 +571,7 @@ For React applications, install the required dependencies:
 npm install wagmi viem @tanstack/react-query
 
 # Grapevine SDK
-npm install @grapevine/sdk
+npm install @pinata/grapevine-sdk
 ```
 
 See `examples/wagmi-usage.tsx` for a complete React component example.
@@ -601,17 +601,17 @@ import type {
   CreateEntryInput,
   PaginatedResponse,
   GrapevineConfig
-} from '@grapevine/sdk';
+} from '@pinata/grapevine-sdk';
 
 // React types
 import type {
   GrapevineHookConfig
-} from '@grapevine/sdk/react';
+} from '@pinata/grapevine-sdk/react';
 
 // Adapter types  
 import type {
   WalletAdapter
-} from '@grapevine/sdk/adapters';
+} from '@pinata/grapevine-sdk/adapters';
 ```
 
 ## License

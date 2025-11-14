@@ -13,8 +13,8 @@ const runtimeVersion = typeof Bun !== 'undefined'
 
 // Package info - hardcoded for standalone executable
 const packageJson = {
-  version: '0.1.0',
-  name: '@grapevine/sdk'
+  version: '0.1.4',
+  name: '@pinata/grapevine-sdk'
 };
 
 // Initialize CLI
