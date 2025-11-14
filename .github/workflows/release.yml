@@ -44,7 +44,7 @@ jobs:
       run: bun test
     
     - name: Publish to npm
-      run: npm publish
+      run: npm publish --provenance --access public
     
     - name: Create tarball for GitHub release
       run: |
@@ -115,7 +115,7 @@ jobs:
     
     - name: Publish CLI to npm
       working-directory: cli-npm-package
-      run: npm publish
+      run: npm publish --provenance --access public
 
   build-cli-executables:
     name: Build CLI for ${{ matrix.platform }}
