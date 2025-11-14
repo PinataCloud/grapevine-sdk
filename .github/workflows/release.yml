@@ -59,6 +59,7 @@ jobs:
 
   publish-cli:
     name: Publish CLI to npm
+    needs: [build-cli-executables]
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -74,26 +75,42 @@ jobs:
         node-version: '20.x'
         registry-url: 'https://registry.npmjs.org'
     
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v1
+    - name: Download all CLI artifacts
+      uses: actions/download-artifact@v4
       with:
-        bun-version: latest
-    
-    - name: Install dependencies
-      run: bun install
-    
-    - name: Build TypeScript
-      run: bun run build
-    
-    - name: Build CLI for Linux (npm default)
-      run: bun run build:cli:linux
+        path: artifacts/
     
     - name: Prepare CLI package
       run: |
-        mkdir -p cli-npm-package
-        cp dist/bin/grapevine-linux cli-npm-package/grapevine
-        chmod +x cli-npm-package/grapevine
-        cp cli-package.json cli-npm-package/package.json
+        mkdir -p cli-npm-package/bin
+        
+        # Extract all executables from artifacts
+        cd artifacts
+        
+        # Linux
+        cd cli-linux && tar -xzf grapevine-cli-linux.tar.gz && cd ..
+        cp cli-linux/grapevine-linux cli-npm-package/bin/grapevine-linux-x64
+        
+        # macOS x64
+        cd cli-macos-x64 && tar -xzf grapevine-cli-macos-x64.tar.gz && cd ..
+        cp cli-macos-x64/grapevine-macos-x64 cli-npm-package/bin/grapevine-darwin-x64
+        
+        # macOS ARM64
+        cd cli-macos-arm64 && tar -xzf grapevine-cli-macos-arm64.tar.gz && cd ..
+        cp cli-macos-arm64/grapevine-macos-arm64 cli-npm-package/bin/grapevine-darwin-arm64
+        
+        # Windows
+        cd cli-windows && unzip grapevine-cli-windows.zip && cd ..
+        cp cli-windows/grapevine-windows.exe cli-npm-package/bin/grapevine-win32-x64.exe
+        
+        cd ..
+        
+        # Make binaries executable
+        chmod +x cli-npm-package/bin/grapevine-*
+        
+        # Copy package files and shim
+        cp src/cli/cli-package.json cli-npm-package/package.json
+        cp src/cli/cli-shim.js cli-npm-package/grapevine.js
         cp README.md cli-npm-package/
     
     - name: Publish CLI to npm

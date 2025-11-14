@@ -2,13 +2,14 @@
   "name": "@pinata/grapevine-cli",
   "version": "0.1.4",
   "description": "Command-line interface for the Grapevine API - Create and manage content feeds with x402 micropayments",
-  "main": "grapevine",
+  "main": "grapevine.js",
   "type": "module",
   "bin": {
-    "grapevine": "./grapevine"
+    "grapevine": "./grapevine.js"
   },
   "files": [
-    "grapevine*",
+    "grapevine.js",
+    "bin/",
     "README.md"
   ],
   "keywords": [
