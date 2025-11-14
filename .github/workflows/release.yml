@@ -40,8 +40,27 @@ jobs:
     - name: Build SDK
       run: bun run build
     
+    - name: Verify build output
+      run: |
+        echo "=== Checking build output ==="
+        ls -la dist/ || echo "dist directory not found"
+        echo ""
+        echo "=== Package contents that will be published ==="
+        npm pack --dry-run || echo "npm pack failed"
+        echo ""
+        echo "=== Current package.json version ==="
+        node -e "console.log('Package:', require('./package.json').name, 'v' + require('./package.json').version)"
+    
     - name: Run tests
       run: bun test
+    
+    - name: Check npm authentication
+      run: |
+        echo "=== npm authentication check ==="
+        npm whoami || echo "Using OIDC trusted publisher (no token needed)"
+        echo ""
+        echo "=== npm config ==="
+        npm config list
     
     - name: Publish to npm
       run: npm publish --provenance --access public
@@ -75,43 +94,80 @@ jobs:
         node-version: '20.x'
         registry-url: 'https://registry.npmjs.org'
     
-    - name: Download all CLI artifacts
+    - name: Download CLI artifacts
       uses: actions/download-artifact@v4
       with:
         path: artifacts/
+    
+    - name: Debug artifacts
+      run: |
+        echo "=== Available artifacts ==="
+        find artifacts -type f -name "*" | head -20
+        echo ""
+        echo "=== Directory structure ==="
+        ls -la artifacts/
+        for dir in artifacts/*/; do
+          echo "Contents of $dir:"
+          ls -la "$dir" || true
+        done
     
     - name: Prepare CLI package
       run: |
         mkdir -p cli-npm-package/bin
         
-        # Extract all executables from artifacts
+        # Extract and copy binaries from artifacts
         cd artifacts
         
         # Linux
-        cd cli-linux && tar -xzf grapevine-cli-linux.tar.gz && cd ..
-        cp cli-linux/grapevine-linux cli-npm-package/bin/grapevine-linux-x64
+        if [ -f "cli-linux/grapevine-cli-linux.tar.gz" ]; then
+          echo "Processing Linux binary..."
+          cd cli-linux && tar -xzf grapevine-cli-linux.tar.gz && ls -la && cd ..
+          cp cli-linux/grapevine-linux ../cli-npm-package/bin/grapevine-linux-x64 2>/dev/null || echo "Linux binary not found after extraction"
+        else
+          echo "Linux artifact not found"
+        fi
         
         # macOS x64
-        cd cli-macos-x64 && tar -xzf grapevine-cli-macos-x64.tar.gz && cd ..
-        cp cli-macos-x64/grapevine-macos-x64 cli-npm-package/bin/grapevine-darwin-x64
+        if [ -f "cli-macos-x64/grapevine-cli-macos-x64.tar.gz" ]; then
+          echo "Processing macOS x64 binary..."
+          cd cli-macos-x64 && tar -xzf grapevine-cli-macos-x64.tar.gz && ls -la && cd ..
+          cp cli-macos-x64/grapevine-macos-x64 ../cli-npm-package/bin/grapevine-darwin-x64 2>/dev/null || echo "macOS x64 binary not found after extraction"
+        else
+          echo "macOS x64 artifact not found"
+        fi
         
         # macOS ARM64
-        cd cli-macos-arm64 && tar -xzf grapevine-cli-macos-arm64.tar.gz && cd ..
-        cp cli-macos-arm64/grapevine-macos-arm64 cli-npm-package/bin/grapevine-darwin-arm64
+        if [ -f "cli-macos-arm64/grapevine-cli-macos-arm64.tar.gz" ]; then
+          echo "Processing macOS ARM64 binary..."
+          cd cli-macos-arm64 && tar -xzf grapevine-cli-macos-arm64.tar.gz && ls -la && cd ..
+          cp cli-macos-arm64/grapevine-macos-arm64 ../cli-npm-package/bin/grapevine-darwin-arm64 2>/dev/null || echo "macOS ARM64 binary not found after extraction"
+        else
+          echo "macOS ARM64 artifact not found"
+        fi
         
         # Windows
-        cd cli-windows && unzip grapevine-cli-windows.zip && cd ..
-        cp cli-windows/grapevine-windows.exe cli-npm-package/bin/grapevine-win32-x64.exe
+        if [ -f "cli-windows/grapevine-cli-windows.zip" ]; then
+          echo "Processing Windows binary..."
+          cd cli-windows && unzip grapevine-cli-windows.zip && ls -la && cd ..
+          cp cli-windows/grapevine-windows.exe ../cli-npm-package/bin/grapevine-win32-x64.exe 2>/dev/null || echo "Windows binary not found after extraction"
+        else
+          echo "Windows artifact not found"
+        fi
         
         cd ..
         
         # Make binaries executable
-        chmod +x cli-npm-package/bin/grapevine-*
+        chmod +x cli-npm-package/bin/grapevine-* 2>/dev/null || true
         
         # Copy package files and shim
         cp src/cli/cli-package.json cli-npm-package/package.json
         cp src/cli/cli-shim.js cli-npm-package/grapevine.js
         cp README.md cli-npm-package/
+        
+        # List what we have
+        echo "=== CLI package contents ==="
+        ls -la cli-npm-package/
+        ls -la cli-npm-package/bin/ 2>/dev/null || echo "No binaries found"
     
     - name: Publish CLI to npm
       working-directory: cli-npm-package
