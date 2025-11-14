@@ -294,13 +294,19 @@ describe('FeedsResource', () => {
         results.push(batch);
       }
 
+      // Verify pagination worked correctly
+      expect(mockRequest).toHaveBeenCalledTimes(1);
       expect(mockRequest).toHaveBeenCalledWith(
-        '/v1/feeds?category=technology&page_size=50',
-        {
+        expect.stringContaining('/v1/feeds'),
+        expect.objectContaining({
           method: 'GET',
           requiresAuth: false
-        }
+        })
       );
+      // Verify the URL contains our query parameters  
+      const calledUrl = mockRequest.mock.calls[0][0];
+      expect(calledUrl).toContain('category=technology');
+      expect(calledUrl).toContain('page_size=50');
       expect(results).toEqual([[mockFeed]]);
     });
   });

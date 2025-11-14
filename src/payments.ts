@@ -42,4 +42,22 @@ export class PaymentManager {
 
     return paymentHeader;
   }
+
+  async handlePaymentRequired(
+    response: Response, 
+    retryRequest: () => Promise<Response>
+  ): Promise<Response> {
+    // If not a 402 response, return as-is
+    if (response.status !== 402) {
+      return response;
+    }
+
+    // Create payment header from 402 response
+    const paymentHeader = await this.createPaymentHeader(response);
+    
+    // Retry the original request with payment header
+    const retryResponse = await retryRequest();
+    
+    return retryResponse;
+  }
 }

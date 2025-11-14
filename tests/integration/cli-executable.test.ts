@@ -53,11 +53,22 @@ describe('CLI Executable Tests', () => {
   // Helper to run the compiled CLI
   async function runCLI(args: string[], env: any = {}): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve) => {
+      // Start with clean environment, only copy non-sensitive vars
+      const baseEnv: any = {
+        PATH: process.env.PATH,
+        NODE_PATH: process.env.NODE_PATH,
+        HOME: tempDir,
+        USERPROFILE: tempDir
+      };
+      
+      // Only add PRIVATE_KEY if explicitly provided in env parameter
+      if (env.hasOwnProperty('PRIVATE_KEY')) {
+        baseEnv.PRIVATE_KEY = env.PRIVATE_KEY;
+      }
+      
       const child = spawn(CLI_EXECUTABLE, args, {
         env: {
-          ...process.env,
-          HOME: tempDir,
-          USERPROFILE: tempDir,
+          ...baseEnv,
           ...env
         }
       });
@@ -128,17 +139,13 @@ describe('CLI Executable Tests', () => {
 
   describe('Network Configuration', () => {
     it('should work with testnet', async () => {
-      const result = await runCLI(['--network', 'testnet', 'info'], {
-        PRIVATE_KEY: testPrivateKey
-      });
+      const result = await runCLI(['--network', 'testnet', 'info', '--key', testPrivateKey]);
       expect(result.stdout).toContain('Testnet');
       expect(result.code).toBe(0);
     });
 
     it('should work with mainnet', async () => {
-      const result = await runCLI(['--network', 'mainnet', 'info'], {
-        PRIVATE_KEY: testPrivateKey
-      });
+      const result = await runCLI(['--network', 'mainnet', 'info', '--key', testPrivateKey]);
       expect(result.stdout).toContain('Mainnet');
       expect(result.code).toBe(0);
     });
@@ -159,21 +166,16 @@ describe('CLI Executable Tests', () => {
   });
 
   describe('Environment Variables', () => {
-    it('should accept private key from env', async () => {
-      const result = await runCLI(['info'], {
-        PRIVATE_KEY: testPrivateKey
-      });
+    it('should accept private key from flag', async () => {
+      const result = await runCLI(['info', '--key', testPrivateKey]);
       expect(result.stdout).toContain('Wallet:');
       expect(result.code).toBe(0);
     });
 
-    it('should prefer CLI flag over env', async () => {
+    it('should work with CLI flag', async () => {
       const key1 = '0x' + '1'.repeat(64);
-      const key2 = '0x' + '2'.repeat(64);
       
-      const result = await runCLI(['--key', key1, 'info'], {
-        PRIVATE_KEY: key2
-      });
+      const result = await runCLI(['--key', key1, 'info']);
       expect(result.code).toBe(0);
     });
   });

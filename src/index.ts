@@ -19,6 +19,11 @@ export type {
   PaymentRequirement
 } from './types.js';
 
+// Export wallet adapters for advanced use
+export type { WalletAdapter } from './adapters/wallet-adapter.js';
+export { PrivateKeyAdapter } from './adapters/private-key-adapter.js';
+export { WagmiAdapter } from './adapters/wagmi-adapter.js';
+
 // Export resource classes if needed for advanced use
 export { FeedsResource } from './resources/feeds.js';
 export { EntriesResource } from './resources/entries.js';

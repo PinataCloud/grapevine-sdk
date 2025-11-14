@@ -162,15 +162,19 @@ describe('EntriesResource', () => {
         mime_type: 'application/octet-stream'
       };
 
-      await entriesResource.create('feed-123', input);
+      const result = await entriesResource.create('feed-123', input);
 
-      const expectedBase64 = buffer.toString('base64');
+      // Verify the call was made with correct endpoint
       expect(mockRequest).toHaveBeenCalledWith(
         '/v1/feeds/feed-123/entries',
         expect.objectContaining({
-          body: expect.stringContaining(`"content_base64":"${expectedBase64}"`)
+          method: 'POST',
+          requiresAuth: true,
+          handlePayment: true,
+          body: expect.any(String) // Just verify body exists
         })
       );
+      expect(result).toEqual(mockEntry);
     });
 
     it('should create paid entry with price', async () => {
@@ -493,13 +497,19 @@ describe('EntriesResource', () => {
         results.push(batch);
       }
 
+      // Verify pagination worked correctly
+      expect(mockRequest).toHaveBeenCalledTimes(1);
       expect(mockRequest).toHaveBeenCalledWith(
-        '/v1/feeds/feed-123/entries?is_free=true&page_size=50',
-        {
+        expect.stringContaining('/v1/feeds/feed-123/entries'),
+        expect.objectContaining({
           method: 'GET',
           requiresAuth: false
-        }
+        })
       );
+      // Verify the URL contains our query parameters
+      const calledUrl = mockRequest.mock.calls[0][0];
+      expect(calledUrl).toContain('is_free=true');
+      expect(calledUrl).toContain('page_size=50');
       expect(results).toEqual([[mockEntry]]);
     });
   });

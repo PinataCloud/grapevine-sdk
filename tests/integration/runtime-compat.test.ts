@@ -148,7 +148,7 @@ describe('Runtime Compatibility Tests', () => {
 
     it('should handle invalid private key format', () => {
       expect(() => new GrapevineClient({ privateKey: 'invalid' }))
-        .toThrow('Private key must start with 0x');
+        .toThrow('Invalid private key format. Must be 66 characters starting with 0x');
     });
   });
 

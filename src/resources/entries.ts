@@ -34,16 +34,26 @@ export class EntriesResource {
       }
     }
 
-    // Convert content to base64
+    // Convert content to base64 (browser-compatible)
     let contentStr: string;
     if (typeof input.content === 'object') {
       contentStr = JSON.stringify(input.content);
-    } else if (Buffer.isBuffer(input.content)) {
+    } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(input.content)) {
+      // Node.js environment
       contentStr = input.content.toString();
     } else {
       contentStr = input.content;
     }
-    const contentBase64 = Buffer.from(contentStr).toString('base64');
+
+    // Browser-compatible base64 encoding
+    let contentBase64: string;
+    if (typeof Buffer !== 'undefined' && Buffer.from) {
+      // Node.js environment
+      contentBase64 = Buffer.from(contentStr).toString('base64');
+    } else {
+      // Browser environment
+      contentBase64 = btoa(unescape(encodeURIComponent(contentStr)));
+    }
 
     // Build entry data
     const entryData: any = {

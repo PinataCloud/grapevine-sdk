@@ -5,12 +5,14 @@ Easy-to-use SDK for the Grapevine API. Create and manage content feeds with buil
 ## Features
 
 ✨ **Simple API** - Clean, intuitive interface for all operations  
-🔐 **Built-in Authentication** - Automatic wallet-based auth handling  
+🔐 **Flexible Authentication** - Private keys or wagmi wallet integration  
 💰 **Transparent Payments** - x402 micropayments handled automatically  
 🎯 **Smart Defaults** - Auto-detect network, MIME types, and more  
 📦 **Batch Operations** - Efficiently handle multiple entries  
+⚛️ **React Integration** - Built-in hooks for React apps with wagmi  
 🔧 **CLI Included** - Command-line interface for quick operations  
 📝 **Full TypeScript Support** - Complete type definitions included  
+🌐 **Browser Compatible** - Works in Node.js and browser environments  
 
 ## Installation
 
@@ -26,6 +28,8 @@ yarn add @grapevine/sdk
 ```
 
 ## Quick Start
+
+### Private Key Authentication (Node.js)
 
 ```typescript
 import { GrapevineClient } from '@grapevine/sdk';
@@ -54,9 +58,50 @@ console.log(`Feed created: ${feed.id}`);
 console.log(`Entry created: ${entry.id}`);
 ```
 
+### React + wagmi Integration
+
+```tsx
+import { useGrapevine } from '@grapevine/sdk/react';
+import { useAccount, useWalletClient } from 'wagmi';
+
+function MyComponent() {
+  const { address } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  
+  const grapevine = useGrapevine({
+    walletClient,
+    address,
+    network: 'testnet',
+    debug: true
+  });
+  
+  const createFeed = async () => {
+    if (!grapevine) return;
+    
+    const feed = await grapevine.feeds.create({
+      name: 'My React Feed',
+      description: 'Created with React and wagmi!',
+      tags: ['react', 'wagmi']
+    });
+    
+    console.log('Feed created:', feed.id);
+  };
+  
+  return (
+    <div>
+      {grapevine ? (
+        <button onClick={createFeed}>Create Feed</button>
+      ) : (
+        <p>Connect your wallet to get started</p>
+      )}
+    </div>
+  );
+}
+```
+
 ## Configuration
 
-### Basic Configuration
+### Private Key Configuration
 
 ```typescript
 const grapevine = new GrapevineClient({
@@ -65,14 +110,39 @@ const grapevine = new GrapevineClient({
 });
 ```
 
-### Auto-Detection
-
-The SDK automatically detects the network from the API URL:
+### wagmi Integration Configuration
 
 ```typescript
-// Explicitly set API URL
+import { GrapevineClient } from '@grapevine/sdk';
+import { WagmiAdapter } from '@grapevine/sdk/adapters';
+
+const wagmiAdapter = new WagmiAdapter(walletClient, address);
 const grapevine = new GrapevineClient({
-  apiUrl: 'https://api.grapevine.markets',  // Auto-detects testnet
+  network: 'testnet',
+  walletAdapter: wagmiAdapter
+});
+
+// Or use the React hook (recommended for React apps)
+const grapevine = useGrapevine({
+  walletClient,
+  address,
+  network: 'testnet'
+});
+```
+
+### Auto-Detection
+
+The SDK automatically detects the network from configuration:
+
+```typescript
+// Explicitly set network
+const grapevine = new GrapevineClient({
+  network: 'mainnet',  // Uses https://api.grapevine.fyi
+  privateKey: '0x...'
+});
+
+const grapevine2 = new GrapevineClient({
+  network: 'testnet',  // Uses https://api.grapevine.markets
   privateKey: '0x...'
 });
 ```
@@ -252,6 +322,119 @@ categories.forEach(cat => {
 });
 ```
 
+## React Integration
+
+The SDK provides React hooks for seamless integration with wagmi-based applications.
+
+### useGrapevine Hook
+
+```tsx
+import { useGrapevine } from '@grapevine/sdk/react';
+import { useAccount, useWalletClient } from 'wagmi';
+
+function MyApp() {
+  const { address } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  
+  const grapevine = useGrapevine({
+    walletClient,
+    address,
+    network: 'testnet',
+    debug: true
+  });
+
+  // grapevine will be null until wallet is connected
+  // and undefined if there's an error during initialization
+  if (!grapevine) {
+    return <div>Connect your wallet to get started</div>;
+  }
+
+  return <FeedManager grapevine={grapevine} />;
+}
+```
+
+### Example React Component
+
+```tsx
+import React, { useState, useEffect } from 'react';
+import { useGrapevine } from '@grapevine/sdk/react';
+import { useAccount, useWalletClient } from 'wagmi';
+
+function FeedManager() {
+  const { address } = useAccount();
+  const { data: walletClient } = useWalletClient();
+  
+  const grapevine = useGrapevine({
+    walletClient,
+    address,
+    network: 'testnet'
+  });
+  
+  const [feeds, setFeeds] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadMyFeeds = async () => {
+    if (!grapevine) return;
+    
+    setLoading(true);
+    try {
+      const result = await grapevine.feeds.myFeeds();
+      setFeeds(result.data);
+    } catch (error) {
+      console.error('Failed to load feeds:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createFeed = async () => {
+    if (!grapevine) return;
+    
+    setLoading(true);
+    try {
+      await grapevine.feeds.create({
+        name: `My Feed ${Date.now()}`,
+        description: 'Created from React app',
+        tags: ['react', 'demo']
+      });
+      await loadMyFeeds(); // Refresh list
+    } catch (error) {
+      console.error('Failed to create feed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (grapevine) {
+      loadMyFeeds();
+    }
+  }, [grapevine]);
+
+  if (!grapevine) {
+    return <div>Connect your wallet to manage feeds</div>;
+  }
+
+  return (
+    <div>
+      <button onClick={createFeed} disabled={loading}>
+        {loading ? 'Creating...' : 'Create Feed'}
+      </button>
+      
+      <div>
+        <h3>My Feeds ({feeds.length})</h3>
+        {feeds.map(feed => (
+          <div key={feed.id}>
+            <h4>{feed.name}</h4>
+            <p>{feed.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
 ## CLI Usage
 
 The SDK includes a command-line interface for quick operations.
@@ -265,16 +448,17 @@ bun add -g @grapevine/sdk
 
 ### Authentication
 
-Set your private key as an environment variable:
-
-```bash
-export PRIVATE_KEY="0xYourPrivateKeyHere"
-```
-
-Or use the `--key` flag with each command:
+**Important:** The CLI requires the `--key` flag for all authenticated operations. Do not store private keys in environment variables for CLI usage.
 
 ```bash
 grapevine --key "0xYourPrivateKeyHere" feed create "My Feed"
+```
+
+For convenience during development, you can set an alias:
+
+```bash
+alias gv='grapevine --key "0xYourPrivateKeyHere"'
+gv feed list --active
 ```
 
 ### Commands
@@ -368,14 +552,29 @@ try {
 
 See the `examples` directory for complete examples:
 
-- `basic-usage.ts` - Simple feed and entry creation
-- `batch-operations.ts` - Batch operations and pagination
+- `basic-usage.ts` - Simple feed and entry creation with private key
+- `batch-operations.ts` - Batch operations and pagination  
+- `wagmi-usage.tsx` - React component with wagmi integration
 
 Run examples:
 ```bash
 bun run examples/basic-usage.ts
 bun run examples/batch-operations.ts
 ```
+
+### React + wagmi Setup
+
+For React applications, install the required dependencies:
+
+```bash
+# wagmi v2 and dependencies
+npm install wagmi viem @tanstack/react-query
+
+# Grapevine SDK
+npm install @grapevine/sdk
+```
+
+See `examples/wagmi-usage.tsx` for a complete React component example.
 
 ## Testing
 
@@ -400,8 +599,19 @@ import type {
   Entry,
   CreateFeedInput,
   CreateEntryInput,
-  PaginatedResponse
+  PaginatedResponse,
+  GrapevineConfig
 } from '@grapevine/sdk';
+
+// React types
+import type {
+  GrapevineHookConfig
+} from '@grapevine/sdk/react';
+
+// Adapter types  
+import type {
+  WalletAdapter
+} from '@grapevine/sdk/adapters';
 ```
 
 ## License

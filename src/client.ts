@@ -3,6 +3,7 @@ import { PaymentManager } from './payments.js';
 import { FeedsResource } from './resources/feeds.js';
 import { EntriesResource } from './resources/entries.js';
 import type { GrapevineConfig, Category } from './types.js';
+import type { WalletAdapter } from './adapters/wallet-adapter.js';
 
 interface RequestOptions {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -36,9 +37,19 @@ export class GrapevineClient {
     this.network = this.isTestnet ? 'base-sepolia' : 'base';
     this.debug = config.debug || false;
 
-    // Initialize auth if private key is provided
+    // Initialize auth if private key or wallet adapter is provided
+    if (config.privateKey && config.walletAdapter) {
+      throw new Error('Cannot provide both privateKey and walletAdapter');
+    }
+    
+    // Validate private key format if provided
     if (config.privateKey) {
+      if (typeof config.privateKey !== 'string' || !config.privateKey.startsWith('0x') || config.privateKey.length !== 66) {
+        throw new Error('Invalid private key format. Must be 66 characters starting with 0x');
+      }
       this.initializeAuth(config.privateKey);
+    } else if (config.walletAdapter) {
+      this.initializeAuthWithAdapter(config.walletAdapter);
     }
 
     // Initialize resources
@@ -55,7 +66,7 @@ export class GrapevineClient {
   }
 
   /**
-   * Initialize authentication (can be called later if key not provided in constructor)
+   * Initialize authentication with a private key (backward compatibility)
    */
   initializeAuth(privateKey: string): void {
     if (!privateKey.startsWith('0x')) {
@@ -67,6 +78,18 @@ export class GrapevineClient {
     
     if (this.debug) {
       console.log('Authentication initialized for wallet:', this.authManager.walletAddress);
+    }
+  }
+
+  /**
+   * Initialize authentication with a wallet adapter (for wagmi and other wallets)
+   */
+  initializeAuthWithAdapter(walletAdapter: WalletAdapter): void {
+    this.authManager = new AuthManager(walletAdapter, this.apiUrl);
+    this.paymentManager = new PaymentManager(this.authManager, this.isTestnet);
+    
+    if (this.debug) {
+      console.log('Authentication initialized with adapter for wallet:', walletAdapter.getAddress());
     }
   }
 
@@ -84,12 +107,14 @@ export class GrapevineClient {
       'Content-Type': 'application/json'
     };
 
+    let authHeaders: any = {};
+    
     // Add auth headers if required
     if (options.requiresAuth) {
       if (!this.authManager) {
         throw new Error('Authentication required but no private key provided');
       }
-      const authHeaders = await this.authManager.getAuthHeaders();
+      authHeaders = await this.authManager.getAuthHeaders();
       Object.assign(headers, authHeaders);
     }
 
@@ -109,15 +134,12 @@ export class GrapevineClient {
       // Create payment header
       const paymentHeader = await this.paymentManager.createPaymentHeader(response);
       
-      // Get fresh auth headers
-      const freshAuthHeaders = await this.authManager!.getAuthHeaders();
-      
-      // Retry with payment
+      // Retry with payment using original auth headers (no additional signature needed)
       response = await fetch(url, {
         method: options.method,
         headers: {
           'Content-Type': 'application/json',
-          ...freshAuthHeaders,
+          ...authHeaders, // Reuse original auth headers
           'X-PAYMENT': paymentHeader,
           'Access-Control-Expose-Headers': 'X-PAYMENT-RESPONSE'
         },

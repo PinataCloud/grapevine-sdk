@@ -1,8 +1,11 @@
+import type { WalletAdapter } from './adapters/wallet-adapter.js';
+
 export type Network = 'testnet' | 'mainnet';
 
 export interface GrapevineConfig {
   network?: Network;
   privateKey?: string;
+  walletAdapter?: WalletAdapter;
   debug?: boolean;
 }
 

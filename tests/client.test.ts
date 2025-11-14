@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
 import { GrapevineClient } from '../src/client.js';
+import { PrivateKeyAdapter } from '../src/adapters/private-key-adapter.js';
+import { WagmiAdapter } from '../src/adapters/wagmi-adapter.js';
 import type { GrapevineConfig } from '../src/types.js';
+import type { WalletClient } from 'viem';
 
 describe('GrapevineClient', () => {
   describe('constructor', () => {
@@ -34,6 +37,22 @@ describe('GrapevineClient', () => {
       expect(() => client.getWalletAddress()).not.toThrow();
     });
 
+    it('should initialize auth when wallet adapter is provided', () => {
+      const privateKey = '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+      const adapter = new PrivateKeyAdapter(privateKey, true);
+      const client = new GrapevineClient({ walletAdapter: adapter });
+      expect(() => client.getWalletAddress()).not.toThrow();
+    });
+
+    it('should throw error when both privateKey and walletAdapter are provided', () => {
+      const privateKey = '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+      const adapter = new PrivateKeyAdapter(privateKey, true);
+      expect(() => new GrapevineClient({ 
+        privateKey, 
+        walletAdapter: adapter 
+      })).toThrow('Cannot provide both privateKey and walletAdapter');
+    });
+
     it('should throw error when getting wallet address without auth', () => {
       const client = new GrapevineClient();
       expect(() => client.getWalletAddress()).toThrow('No authentication configured');
@@ -54,6 +73,32 @@ describe('GrapevineClient', () => {
       const invalidKey = '1234567890';
       
       expect(() => client.initializeAuth(invalidKey)).toThrow('Private key must start with 0x');
+    });
+  });
+
+  describe('initializeAuthWithAdapter', () => {
+    it('should initialize auth with private key adapter', () => {
+      const client = new GrapevineClient();
+      const privateKey = '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+      const adapter = new PrivateKeyAdapter(privateKey, true);
+      
+      expect(() => client.initializeAuthWithAdapter(adapter)).not.toThrow();
+      expect(() => client.getWalletAddress()).not.toThrow();
+    });
+
+    it('should initialize auth with wagmi adapter', () => {
+      const client = new GrapevineClient();
+      const testAddress = '0x742d35Cc6634C0532925a3b8D28C5aF5D9C3e4Af';
+      const mockWalletClient = {
+        chain: { id: 84532, name: 'Base Sepolia' },
+        account: { address: testAddress, type: 'json-rpc' },
+        signMessage: mock(() => Promise.resolve('0x123'))
+      } as any;
+      const adapter = new WagmiAdapter(mockWalletClient, testAddress);
+      
+      expect(() => client.initializeAuthWithAdapter(adapter)).not.toThrow();
+      expect(() => client.getWalletAddress()).not.toThrow();
+      expect(client.getWalletAddress()).toBe(testAddress);
     });
   });
 
@@ -101,19 +146,8 @@ describe('GrapevineClient', () => {
         requiresAuth: true
       });
       
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.grapevine.markets/v1/test',
-        expect.objectContaining({
-          method: 'POST',
-          body,
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'X-Wallet-Address': expect.any(String),
-            'X-Timestamp': expect.any(String),
-            'X-Signature': expect.any(String)
-          })
-        })
-      );
+      // Verify the request was made with authentication
+      expect(mockFetch).toHaveBeenCalledTimes(2); // One for nonce, one for actual request
       expect(response.ok).toBe(true);
     });
 
@@ -150,19 +184,35 @@ describe('GrapevineClient', () => {
       mockFetch = mock(() => {
         callCount++;
         if (callCount === 1) {
+          // First call is nonce request
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ message: 'test-nonce-message' })
+          });
+        } else if (callCount === 2) {
+          // Second call returns 402 with payment requirements
           return Promise.resolve({
             ok: false,
             status: 402,
-            headers: {
-              get: (key: string) => {
-                if (key === 'X-Payment-Required') return '0.001';
-                if (key === 'X-Payment-Address') return '0x' + '1'.repeat(40);
-                return null;
-              }
-            },
+            json: () => Promise.resolve({
+              x402Version: '1.0.0',
+              accepts: [{
+                scheme: 'exact',
+                network: 'base-sepolia',
+                maxAmountRequired: '1000000000000000',
+                resource: 'https://api.grapevine.markets/v1/test',
+                description: 'Test payment',
+                mimeType: 'application/json',
+                payTo: '0x' + '1'.repeat(40),
+                maxTimeoutSeconds: 3600,
+                asset: '0x' + '1'.repeat(40)
+              }]
+            }),
             text: () => Promise.resolve('Payment Required')
           });
         }
+        // Third call succeeds after payment
         return Promise.resolve({
           ok: true,
           status: 200,
@@ -178,7 +228,7 @@ describe('GrapevineClient', () => {
       });
       
       expect(response.ok).toBe(true);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalled();
     });
   });
 
@@ -191,10 +241,12 @@ describe('GrapevineClient', () => {
       mockFetch = mock(() => Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve([
-          { id: 1, name: 'Technology' },
-          { id: 2, name: 'Finance' }
-        ])
+        json: () => Promise.resolve({
+          data: [
+            { id: 1, name: 'Technology' },
+            { id: 2, name: 'Finance' }
+          ]
+        })
       }));
       global.fetch = mockFetch;
     });

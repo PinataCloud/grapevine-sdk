@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, mock } from 'bun:test';
 import { AuthManager } from '../src/auth.js';
+import { PrivateKeyAdapter } from '../src/adapters/private-key-adapter.js';
+import type { WalletAdapter } from '../src/adapters/wallet-adapter.js';
 
 describe('AuthManager', () => {
   // Use a valid private key (not all zeros)
@@ -19,14 +21,21 @@ describe('AuthManager', () => {
   });
 
   describe('constructor', () => {
-    it('should initialize with testnet configuration', () => {
+    it('should initialize with private key and testnet configuration', () => {
       const auth = new AuthManager(validPrivateKey, testApiUrl, true);
       expect(auth.walletAddress).toBeDefined();
       expect(auth.walletAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
     });
 
-    it('should initialize with mainnet configuration', () => {
+    it('should initialize with private key and mainnet configuration', () => {
       const auth = new AuthManager(validPrivateKey, 'https://api.grapevine.fyi', false);
+      expect(auth.walletAddress).toBeDefined();
+      expect(auth.walletAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    });
+
+    it('should initialize with wallet adapter', () => {
+      const adapter = new PrivateKeyAdapter(validPrivateKey, true);
+      const auth = new AuthManager(adapter, testApiUrl);
       expect(auth.walletAddress).toBeDefined();
       expect(auth.walletAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
     });
@@ -37,12 +46,23 @@ describe('AuthManager', () => {
       expect(auth1.walletAddress).toBe(auth2.walletAddress);
     });
 
+    it('should generate same address with adapter and direct private key', () => {
+      const auth1 = new AuthManager(validPrivateKey, testApiUrl, true);
+      const adapter = new PrivateKeyAdapter(validPrivateKey, true);
+      const auth2 = new AuthManager(adapter, testApiUrl);
+      expect(auth1.walletAddress).toBe(auth2.walletAddress);
+    });
+
     it('should generate different wallet addresses for different private keys', () => {
       const key1 = '0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
       const key2 = '0x1111111111111111111111111111111111111111111111111111111111111111';
       const auth1 = new AuthManager(key1, testApiUrl, true);
       const auth2 = new AuthManager(key2, testApiUrl, true);
       expect(auth1.walletAddress).not.toBe(auth2.walletAddress);
+    });
+
+    it('should throw error when private key is used without isTestnet', () => {
+      expect(() => new AuthManager(validPrivateKey, testApiUrl)).toThrow('isTestnet parameter is required when using private key');
     });
   });
 
@@ -154,6 +174,15 @@ describe('AuthManager', () => {
       
       expect(client.chain).toBeDefined();
       expect(client.chain?.id).toBe(8453); // Base mainnet
+    });
+  });
+
+  describe('getWalletAdapter', () => {
+    it('should return the wallet adapter', () => {
+      const adapter = new PrivateKeyAdapter(validPrivateKey, true);
+      const auth = new AuthManager(adapter, testApiUrl);
+      
+      expect(auth.getWalletAdapter()).toBe(adapter);
     });
   });
 });

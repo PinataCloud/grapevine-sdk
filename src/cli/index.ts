@@ -68,16 +68,22 @@ function getClient(options: any, requireAuth: boolean = true): GrapevineClient {
   const privateKey = options.key || globalOpts.key || process.env.PRIVATE_KEY;
   
   if (requireAuth && !privateKey) {
-    console.error('❌ Private key required. Use --key or set PRIVATE_KEY env variable');
+    console.error('❌ Private key required. Use --key flag');
     console.error('   You can also run "grapevine auth" to configure authentication');
     process.exit(1);
   }
 
-  return new GrapevineClient({
+  const config: any = {
     network: globalOpts.network || options.network || savedConfig.network,
-    privateKey,
     debug: globalOpts.debug || options.debug
-  });
+  };
+  
+  // Only add private key if provided
+  if (privateKey) {
+    config.privateKey = privateKey;
+  }
+
+  return new GrapevineClient(config);
 }
 
 // Feed commands
@@ -266,21 +272,21 @@ authCmd
   .command('login')
   .description('Configure authentication with private key')
   .option('-k, --key <key>', 'Private key')
-  .option('-n, --network <network>', 'Default network (testnet/mainnet)', 'testnet')
+  .option('-n, --network <network>', 'Default network (testnet/mainnet)')
   .action(async (options) => {
     try {
       const globalOpts = program.opts();
       const privateKey = options.key || globalOpts.key || process.env.PRIVATE_KEY;
+      const network = options.network || globalOpts.network || 'testnet';
       
       if (!privateKey) {
-        console.error('❌ Private key required. Use --key or set PRIVATE_KEY env variable');
+        console.error('❌ Private key required. Use --key flag');
         console.error('\n⚠️  Security Note:');
         console.error('   Never share your private key with anyone.');
         console.error('   Consider using environment variables for production.');
         process.exit(1);
       }
 
-      // Validate private key format
       if (!privateKey.startsWith('0x') || privateKey.length !== 66) {
         console.error('❌ Invalid private key format. Must be 66 characters starting with 0x');
         process.exit(1);
@@ -289,11 +295,11 @@ authCmd
       // Test the key by creating a client
       const client = new GrapevineClient({
         privateKey,
-        network: options.network
+        network: network as 'testnet' | 'mainnet'
       });
 
       const config = {
-        network: options.network,
+        network: network,
         wallet: client.getWalletAddress(),
         configuredAt: new Date().toISOString()
       };
@@ -304,7 +310,7 @@ authCmd
       const { file } = getConfigPath();
       console.log('\n✅ Authentication configured successfully!');
       console.log(`\n   Wallet: ${client.getWalletAddress()}`);
-      console.log(`   Network: ${options.network}`);
+      console.log(`   Network: ${network}`);
       console.log(`\n   Config saved to: ${file}`);
       console.log('\n⚠️  Note: Private key is NOT saved. You must still provide it via:');
       console.log('   • PRIVATE_KEY environment variable');
@@ -336,8 +342,9 @@ authCmd
     }
     
     console.log('\n   Private Key Status:');
-    if (privateKey) {
-      console.log('   ✅ Private key available (via env or flag)');
+    if (privateKey && privateKey.startsWith('0x') && privateKey.length === 66) {
+      const source = globalOpts.key ? '--key flag' : 'PRIVATE_KEY env var';
+      console.log(`   ✅ Private key available (via ${source})`);
       try {
         const client = new GrapevineClient({ privateKey });
         console.log(`   Wallet: ${client.getWalletAddress()}`);
@@ -346,7 +353,7 @@ authCmd
       }
     } else {
       console.log('   ❌ No private key provided');
-      console.log('   Set PRIVATE_KEY env variable or use --key flag');
+      console.log('   Use --key flag or PRIVATE_KEY env var');
     }
   });
 
@@ -382,7 +389,7 @@ program
     console.log(`   Runtime: ${runtime} ${runtimeVersion}`);
     console.log(`   Default Network: ${config.network || 'testnet'}`);
     
-    if (privateKey) {
+    if (privateKey && privateKey.startsWith('0x') && privateKey.length === 66) {
       try {
         const client = new GrapevineClient({ 
           privateKey,
@@ -398,7 +405,7 @@ program
       // Show saved config info even without private key
       console.log(`   Active Network: ${config.network === 'mainnet' ? 'Mainnet' : 'Testnet'}`);
       console.log(`   Wallet: ${config.wallet}`);
-      console.log('   ⚠️  Private key not provided - some operations require PRIVATE_KEY env var or --key flag');
+      console.log('   ⚠️  Private key not provided - some operations require --key flag');
     } else {
       console.log('   ⚠️  No authentication configured');
       console.log('   Run "grapevine auth login" to configure');

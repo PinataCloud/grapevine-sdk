@@ -29,11 +29,22 @@ describe('Grapevine CLI', () => {
   // Helper to run CLI command
   async function runCommand(args: string[], env: any = {}): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve) => {
+      // Start with clean environment, only copy non-sensitive vars
+      const baseEnv: any = {
+        PATH: process.env.PATH,
+        NODE_PATH: process.env.NODE_PATH,
+        HOME: tempDir,
+        USERPROFILE: tempDir
+      };
+      
+      // Only add PRIVATE_KEY if explicitly provided in env parameter
+      if (env.hasOwnProperty('PRIVATE_KEY')) {
+        baseEnv.PRIVATE_KEY = env.PRIVATE_KEY;
+      }
+      
       const child = spawn('bun', [CLI_PATH, ...args], {
         env: {
-          ...process.env,
-          HOME: tempDir,
-          USERPROFILE: tempDir,
+          ...baseEnv,
           ...env
         }
       });
@@ -98,8 +109,8 @@ describe('Grapevine CLI', () => {
         expect(result.code).toBe(1);
       });
 
-      it('should accept key from environment', async () => {
-        const result = await runCommand(['auth', 'login'], { PRIVATE_KEY: testPrivateKey });
+      it('should accept key via flag', async () => {
+        const result = await runCommand(['auth', 'login', '--key', testPrivateKey]);
         expect(result.stdout).toContain('Authentication configured successfully');
         expect(result.code).toBe(0);
       });
@@ -116,6 +127,7 @@ describe('Grapevine CLI', () => {
 
     describe('auth status', () => {
       it('should show status when not configured', async () => {
+        // Run without PRIVATE_KEY env var to get "no private key" state
         const result = await runCommand(['auth', 'status']);
         expect(result.stdout).toContain('Authentication Status');
         expect(result.stdout).toContain('No saved configuration found');
@@ -127,8 +139,8 @@ describe('Grapevine CLI', () => {
         // First login
         await runCommand(['auth', 'login', '--key', testPrivateKey]);
         
-        // Then check status
-        const result = await runCommand(['auth', 'status'], { PRIVATE_KEY: testPrivateKey });
+        // Then check status with key provided
+        const result = await runCommand(['auth', 'status', '--key', testPrivateKey]);
         expect(result.stdout).toContain('Configuration found');
         expect(result.stdout).toContain('Private key available');
         expect(result.stdout).toContain('Wallet:');
@@ -168,7 +180,7 @@ describe('Grapevine CLI', () => {
     });
 
     it('should show info with authentication', async () => {
-      const result = await runCommand(['info'], { PRIVATE_KEY: testPrivateKey });
+      const result = await runCommand(['info', '--key', testPrivateKey]);
       expect(result.stdout).toContain('Grapevine SDK Info');
       expect(result.stdout).toContain('Active Network:');
       expect(result.stdout).toContain('Chain:');
@@ -223,7 +235,7 @@ describe('Grapevine CLI', () => {
 
   describe('network options', () => {
     it('should accept network flag globally', async () => {
-      const result = await runCommand(['--network', 'mainnet', 'info'], { PRIVATE_KEY: testPrivateKey });
+      const result = await runCommand(['--network', 'mainnet', 'info', '--key', testPrivateKey]);
       expect(result.stdout).toContain('Mainnet');
       expect(result.code).toBe(0);
     });
@@ -232,15 +244,15 @@ describe('Grapevine CLI', () => {
       // Login with mainnet
       await runCommand(['auth', 'login', '--key', testPrivateKey, '--network', 'mainnet']);
       
-      // Run info without specifying network
-      const result = await runCommand(['info'], { PRIVATE_KEY: testPrivateKey });
+      // Run info without specifying network but with key
+      const result = await runCommand(['info', '--key', testPrivateKey]);
       expect(result.stdout).toContain('Default Network: mainnet');
     });
   });
 
   describe('debug mode', () => {
     it('should accept debug flag', async () => {
-      const result = await runCommand(['--debug', 'info'], { PRIVATE_KEY: testPrivateKey });
+      const result = await runCommand(['--debug', 'info', '--key', testPrivateKey]);
       expect(result.code).toBe(0);
     });
   });

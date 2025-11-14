@@ -1,33 +1,46 @@
-import { createWalletClient, http, type WalletClient } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { base, baseSepolia } from 'viem/chains';
+import type { WalletClient } from 'viem';
 import type { AuthHeaders } from './types.js';
+import type { WalletAdapter } from './adapters/wallet-adapter.js';
+import { PrivateKeyAdapter } from './adapters/private-key-adapter.js';
 
 export class AuthManager {
-  private walletClient: WalletClient;
-  private account: ReturnType<typeof privateKeyToAccount>;
+  private walletAdapter: WalletAdapter;
   private apiUrl: string;
-  private chainId: string;
 
-  constructor(privateKey: string, apiUrl: string, isTestnet: boolean) {
-    this.account = privateKeyToAccount(privateKey as `0x${string}`);
+  /**
+   * Create an AuthManager with a wallet adapter
+   */
+  constructor(walletAdapter: WalletAdapter, apiUrl: string);
+  /**
+   * Create an AuthManager with a private key (backward compatibility)
+   */
+  constructor(privateKey: string, apiUrl: string, isTestnet: boolean);
+  constructor(
+    walletAdapterOrPrivateKey: WalletAdapter | string,
+    apiUrl: string,
+    isTestnet?: boolean
+  ) {
     this.apiUrl = apiUrl;
-    this.chainId = isTestnet ? '84532' : '8453';
     
-    const chain = isTestnet ? baseSepolia : base;
-    this.walletClient = createWalletClient({
-      account: this.account,
-      chain,
-      transport: http()
-    });
+    if (typeof walletAdapterOrPrivateKey === 'string') {
+      // Backward compatibility: create a PrivateKeyAdapter
+      if (isTestnet === undefined) {
+        throw new Error('isTestnet parameter is required when using private key');
+      }
+      this.walletAdapter = new PrivateKeyAdapter(walletAdapterOrPrivateKey, isTestnet);
+    } else {
+      // New way: use the provided adapter
+      this.walletAdapter = walletAdapterOrPrivateKey;
+    }
   }
 
   async getAuthHeaders(): Promise<AuthHeaders> {
     // Request nonce from API
+    const walletAddress = this.walletAdapter.getAddress();
     const nonceResponse = await fetch(`${this.apiUrl}/v1/auth/nonce`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet_address: this.account.address })
+      body: JSON.stringify({ wallet_address: walletAddress })
     });
     
     if (!nonceResponse.ok) {
@@ -38,25 +51,29 @@ export class AuthManager {
     const { message } = responseData;
     
     // Sign the message
-    const signature = await this.walletClient.signMessage({ 
-      message,
-      account: this.account 
-    });
+    const signature = await this.walletAdapter.signMessage(message);
     
     return {
-      'x-wallet-address': this.account.address,
+      'x-wallet-address': walletAddress,
       'x-signature': signature,
       'x-message': message,
       'x-timestamp': Math.floor(Date.now() / 1000).toString(),
-      'x-chain-id': this.chainId
+      'x-chain-id': this.walletAdapter.getChainId()
     };
   }
 
   get walletAddress(): string {
-    return this.account.address;
+    return this.walletAdapter.getAddress();
   }
 
   getWalletClient(): WalletClient {
-    return this.walletClient;
+    return this.walletAdapter.getWalletClient();
+  }
+
+  /**
+   * Get the underlying wallet adapter
+   */
+  getWalletAdapter(): WalletAdapter {
+    return this.walletAdapter;
   }
 }
