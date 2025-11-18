@@ -10,7 +10,7 @@ Easy-to-use SDK for the Grapevine API. Create and manage content feeds with buil
 🎯 **Smart Defaults** - Auto-detect network, MIME types, and more  
 📦 **Batch Operations** - Efficiently handle multiple entries  
 ⚛️ **React Integration** - Built-in hooks for React apps with wagmi  
-🔧 **CLI Included** - Command-line interface for quick operations  
+  
 📝 **Full TypeScript Support** - Complete type definitions included  
 🌐 **Browser Compatible** - Works in Node.js and browser environments  
 
@@ -435,83 +435,18 @@ function FeedManager() {
 }
 ```
 
-## CLI Usage
+## CLI
 
-The SDK includes a command-line interface for quick operations.
+A command-line interface for the Grapevine API is available as a separate Go application:
 
-### Installation
+**[Grapevine CLI](https://github.com/PinataCloud/grapevine-cli)** - Fast, lightweight command-line interface
+
+Install the CLI:
 ```bash
-npm install -g @pinata/grapevine-sdk
-# or
-bun add -g @pinata/grapevine-sdk
-```
+# Install via npm
+npm install -g @pinata/grapevine-cli
 
-### Authentication
-
-**Important:** The CLI requires the `--key` flag for all authenticated operations. Do not store private keys in environment variables for CLI usage.
-
-```bash
-grapevine --key "0xYourPrivateKeyHere" feed create "My Feed"
-```
-
-For convenience during development, you can set an alias:
-
-```bash
-alias gv='grapevine --key "0xYourPrivateKeyHere"'
-gv feed list --active
-```
-
-### Commands
-
-#### Create Feed
-```bash
-grapevine feed create "My Feed" --description "Test feed" --tags tech,ai
-```
-
-#### List Feeds
-```bash
-grapevine feed list --active --limit 10
-grapevine feed list --owner 0xAddress --tags tech
-```
-
-#### Get Feed Details
-```bash
-grapevine feed get <feed-id>
-```
-
-#### Add Entry
-```bash
-# Add text
-grapevine entry add <feed-id> "Hello World" --title "First Entry"
-
-# Add from file
-grapevine entry add <feed-id> ./content.md --file --mime text/markdown
-
-# Add paid entry
-grapevine entry add <feed-id> "Premium content" --paid --price 1000000
-```
-
-#### List Entries
-```bash
-grapevine entry list <feed-id> --free --limit 20
-```
-
-#### List Categories
-```bash
-grapevine categories
-```
-
-#### Show Info
-```bash
-grapevine info
-```
-
-### CLI Options
-```bash
-# Global options
---network <network>  # testnet or mainnet (default: testnet)
---key <key>         # Private key (or use PRIVATE_KEY env var)
---debug            # Enable debug output
+# Or download binary directly from releases
 ```
 
 ## Advanced Usage
@@ -613,6 +548,25 @@ import type {
   WalletAdapter
 } from '@pinata/grapevine-sdk/adapters';
 ```
+
+## Project Structure
+
+```
+grapevine-sdk/
+├── src/                     # TypeScript SDK source
+│   ├── client.ts           # Main client class
+│   ├── resources/          # API resource classes
+│   ├── adapters/           # Wallet adapters (wagmi, private key)
+│   ├── react/              # React hooks
+│   └── types.ts            # TypeScript definitions
+├── tests/                  # Test suites
+│   ├── unit/              # SDK unit tests
+│   ├── integration/       # Integration tests
+│   └── e2e/               # End-to-end tests
+├── dist/                   # Built TypeScript output
+└── examples/              # Usage examples
+```
+
 
 ## License
 

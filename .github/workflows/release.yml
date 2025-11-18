@@ -1,4 +1,4 @@
-name: Release SDK & CLI
+name: Release SDK
 
 on:
   push:
@@ -12,22 +12,12 @@ on:
         type: string
 
 jobs:
-  publish-sdk:
-    name: Publish SDK to npm
+  build-and-publish:
+    name: Build and Publish SDK
     runs-on: ubuntu-latest
-    environment: production
-    permissions:
-      contents: read
-      id-token: write
     
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        registry-url: 'https://registry.npmjs.org'
     
     - name: Setup Bun
       uses: oven-sh/setup-bun@v1
@@ -40,30 +30,8 @@ jobs:
     - name: Build SDK
       run: bun run build
     
-    - name: Verify build output
-      run: |
-        echo "=== Checking build output ==="
-        ls -la dist/ || echo "dist directory not found"
-        echo ""
-        echo "=== Package contents that will be published ==="
-        npm pack --dry-run || echo "npm pack failed"
-        echo ""
-        echo "=== Current package.json version ==="
-        node -e "console.log('Package:', require('./package.json').name, 'v' + require('./package.json').version)"
-    
     - name: Run tests
       run: bun test
-    
-    - name: Check npm authentication
-      run: |
-        echo "=== npm authentication check ==="
-        npm whoami || echo "Using OIDC trusted publisher (no token needed)"
-        echo ""
-        echo "=== npm config ==="
-        npm config list
-    
-    - name: Publish to npm
-      run: npm publish --provenance --access public
     
     - name: Create tarball for GitHub release
       run: |
@@ -76,167 +44,9 @@ jobs:
         path: '*.tar.gz'
         retention-days: 7
 
-  publish-cli:
-    name: Publish CLI to npm
-    needs: [build-cli-executables]
-    runs-on: ubuntu-latest
-    environment: production
-    permissions:
-      contents: read
-      id-token: write
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        registry-url: 'https://registry.npmjs.org'
-    
-    - name: Download CLI artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts/
-    
-    - name: Debug artifacts
-      run: |
-        echo "=== Available artifacts ==="
-        find artifacts -type f -name "*" | head -20
-        echo ""
-        echo "=== Directory structure ==="
-        ls -la artifacts/
-        for dir in artifacts/*/; do
-          echo "Contents of $dir:"
-          ls -la "$dir" || true
-        done
-    
-    - name: Prepare CLI package
-      run: |
-        mkdir -p cli-npm-package/bin
-        
-        # Extract and copy binaries from artifacts
-        cd artifacts
-        
-        # Linux
-        if [ -f "cli-linux/grapevine-cli-linux.tar.gz" ]; then
-          echo "Processing Linux binary..."
-          cd cli-linux && tar -xzf grapevine-cli-linux.tar.gz && ls -la && cd ..
-          cp cli-linux/grapevine-linux ../cli-npm-package/bin/grapevine-linux-x64 2>/dev/null || echo "Linux binary not found after extraction"
-        else
-          echo "Linux artifact not found"
-        fi
-        
-        # macOS x64
-        if [ -f "cli-macos-x64/grapevine-cli-macos-x64.tar.gz" ]; then
-          echo "Processing macOS x64 binary..."
-          cd cli-macos-x64 && tar -xzf grapevine-cli-macos-x64.tar.gz && ls -la && cd ..
-          cp cli-macos-x64/grapevine-macos-x64 ../cli-npm-package/bin/grapevine-darwin-x64 2>/dev/null || echo "macOS x64 binary not found after extraction"
-        else
-          echo "macOS x64 artifact not found"
-        fi
-        
-        # macOS ARM64
-        if [ -f "cli-macos-arm64/grapevine-cli-macos-arm64.tar.gz" ]; then
-          echo "Processing macOS ARM64 binary..."
-          cd cli-macos-arm64 && tar -xzf grapevine-cli-macos-arm64.tar.gz && ls -la && cd ..
-          cp cli-macos-arm64/grapevine-macos-arm64 ../cli-npm-package/bin/grapevine-darwin-arm64 2>/dev/null || echo "macOS ARM64 binary not found after extraction"
-        else
-          echo "macOS ARM64 artifact not found"
-        fi
-        
-        # Windows
-        if [ -f "cli-windows/grapevine-cli-windows.zip" ]; then
-          echo "Processing Windows binary..."
-          cd cli-windows && unzip grapevine-cli-windows.zip && ls -la && cd ..
-          cp cli-windows/grapevine-windows.exe ../cli-npm-package/bin/grapevine-win32-x64.exe 2>/dev/null || echo "Windows binary not found after extraction"
-        else
-          echo "Windows artifact not found"
-        fi
-        
-        cd ..
-        
-        # Make binaries executable
-        chmod +x cli-npm-package/bin/grapevine-* 2>/dev/null || true
-        
-        # Copy package files and shim
-        cp src/cli/cli-package.json cli-npm-package/package.json
-        cp src/cli/cli-shim.js cli-npm-package/grapevine.js
-        cp README.md cli-npm-package/
-        
-        # List what we have
-        echo "=== CLI package contents ==="
-        ls -la cli-npm-package/
-        ls -la cli-npm-package/bin/ 2>/dev/null || echo "No binaries found"
-    
-    - name: Publish CLI to npm
-      working-directory: cli-npm-package
-      run: npm publish --provenance --access public
-
-  build-cli-executables:
-    name: Build CLI for ${{ matrix.platform }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: linux
-            target: linux
-          - os: macos-latest
-            platform: macos-x64
-            target: macos-x64
-          - os: macos-latest
-            platform: macos-arm64
-            target: macos-arm
-          - os: windows-latest
-            platform: windows
-            target: windows
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v1
-      with:
-        bun-version: latest
-    
-    - name: Install dependencies
-      run: bun install
-    
-    - name: Build TypeScript
-      run: bun run build
-    
-    - name: Build CLI executable
-      run: bun run build:cli:${{ matrix.target }}
-    
-    - name: Create archive (Unix)
-      if: runner.os != 'Windows'
-      run: |
-        cd dist/bin
-        if [ "${{ matrix.platform }}" == "macos-arm64" ]; then
-          tar -czf grapevine-cli-${{ matrix.platform }}.tar.gz grapevine-macos-arm64
-        elif [ "${{ matrix.platform }}" == "macos-x64" ]; then
-          tar -czf grapevine-cli-${{ matrix.platform }}.tar.gz grapevine-macos-x64
-        else
-          tar -czf grapevine-cli-${{ matrix.platform }}.tar.gz grapevine-${{ matrix.platform }}
-        fi
-    
-    - name: Create archive (Windows)
-      if: runner.os == 'Windows'
-      run: |
-        cd dist\bin
-        Compress-Archive -Path grapevine-windows.exe -DestinationPath grapevine-cli-windows.zip
-    
-    - name: Upload CLI executable
-      uses: actions/upload-artifact@v4
-      with:
-        name: cli-${{ matrix.platform }}
-        path: dist/bin/grapevine-cli-${{ matrix.platform }}.*
-        retention-days: 7
-
   create-release:
     name: Create GitHub Release
-    needs: [publish-sdk, publish-cli, build-cli-executables]
+    needs: [build-and-publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -256,9 +66,6 @@ jobs:
         # Copy SDK package
         cp artifacts/sdk-package/*.tar.gz release-assets/
         
-        # Copy CLI executables
-        find artifacts -name "grapevine-cli-*" -type f -exec cp {} release-assets/ \;
-        
         # List all assets
         ls -la release-assets/
     
@@ -274,7 +81,7 @@ jobs:
     - name: Create Release Notes
       run: |
         cat > release-notes.md << EOF
-        # Grapevine SDK & CLI Release v${{ steps.version.outputs.VERSION }}
+        # Grapevine SDK Release v${{ steps.version.outputs.VERSION }}
         
         ## 📦 SDK Package
         - **npm**: \`npm install @pinata/grapevine-sdk\`
@@ -282,29 +89,13 @@ jobs:
         - TypeScript/JavaScript SDK for Grapevine API with wagmi integration
         
         ## 🖥️ CLI 
-        ### npm Installation (Recommended)
+        The Grapevine CLI is now available as a separate Go application:
+        
+        **[Grapevine CLI](https://github.com/PinataCloud/grapevine-cli)**
+        
         \`\`\`bash
         npm install -g @pinata/grapevine-cli
-        # Then use: grapevine --help
         \`\`\`
-        
-        ### Direct Binary Download
-        Available for all platforms:
-        - Linux (x64)
-        - macOS (x64 & ARM64) 
-        - Windows (x64)
-        
-        #### macOS/Linux
-        \`\`\`bash
-        # Download the appropriate binary for your platform
-        curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/grapevine-cli-[platform].tar.gz -o grapevine-cli.tar.gz
-        tar -xzf grapevine-cli.tar.gz
-        chmod +x grapevine-cli
-        sudo mv grapevine-cli /usr/local/bin/
-        \`\`\`
-        
-        #### Windows
-        Download the Windows executable and add to your PATH.
         
         ## What's Changed
         See the [full changelog](https://github.com/${{ github.repository }}/compare/v${{ steps.version.outputs.VERSION }}...v${{ steps.version.outputs.VERSION }})

@@ -221,6 +221,265 @@ export default function TestSuite() {
           entries: entriesResponse.data.map(e => ({ id: e.id, title: e.title }))
         };
       }
+    },
+    {
+      id: 'test-feeds-pagination',
+      name: 'Test Feeds Pagination',
+      description: 'Test feeds pagination with complete boundary validation',
+      category: 'Pagination',
+      test: async (client) => {
+        console.log('Testing feeds pagination with complete boundary validation...');
+        
+        // Test 1: Complete pagination cycle until next_page_token is null
+        let pageCount = 0;
+        let allFeeds: any[] = [];
+        let lastToken: string | undefined;
+        let hasMorePages = true;
+        const paginationDetails: any[] = [];
+
+        const safetyLimit = 25; // Increased limit to allow more thorough testing
+        let hitSafetyLimit = false;
+        
+        while (hasMorePages && pageCount < safetyLimit) {
+          const response = await client.feeds.list({ 
+            page_size: 4, 
+            page_token: lastToken 
+          });
+          
+          pageCount++;
+          allFeeds.push(...response.data);
+          
+          paginationDetails.push({
+            pageNumber: pageCount,
+            itemCount: response.data.length,
+            nextTokenPresent: !!response.next_page_token,
+            totalCount: response.total_count,
+            sampleIds: response.data.slice(0, 2).map(f => f.id)
+          });
+          
+          hasMorePages = !!response.next_page_token;
+          lastToken = response.next_page_token;
+        }
+        
+        // Check if we stopped due to safety limit rather than natural boundary
+        hitSafetyLimit = pageCount >= safetyLimit && hasMorePages;
+
+        // Test 2: Edge case with maximum page_size (API limit is 100)
+        const largePageResponse = await client.feeds.list({ page_size: 100 });
+        const edgeCaseResult = {
+          requestedPageSize: 100,
+          actualReceived: largePageResponse.data.length,
+          nextTokenPresent: !!largePageResponse.next_page_token,
+          reachedMaxLimit: largePageResponse.data.length <= 100
+        };
+
+        // Test 3: Generator exhaustion test (limited for manual testing)
+        let generatorPages = 0;
+        let generatorTotal = 0;
+        const seenIds = new Set<string>();
+        const generatorResults: any[] = [];
+
+        for await (const batch of client.feeds.paginate({ page_size: 5 })) {
+          generatorPages++;
+          generatorTotal += batch.length;
+          
+          const hasDuplicates = batch.some(feed => seenIds.has(feed.id));
+          batch.forEach(feed => seenIds.add(feed.id));
+          
+          generatorResults.push({
+            pageNumber: generatorPages,
+            batchSize: batch.length,
+            duplicatesFound: hasDuplicates,
+            uniqueIdsTotal: seenIds.size
+          });
+          
+          if (generatorPages >= 5) break; // Limit for manual testing
+        }
+        
+        return {
+          boundaryTest: {
+            totalPagesProcessed: pageCount,
+            totalFeedsFound: allFeeds.length,
+            uniqueFeeds: new Set(allFeeds.map(f => f.id)).size,
+            reachedBoundary: !hasMorePages && !hitSafetyLimit,
+            hitSafetyLimit,
+            safetyLimit,
+            estimatedTotalFeeds: hitSafetyLimit ? `${allFeeds.length}+` : allFeeds.length,
+            paginationDetails: paginationDetails.slice(0, 5) // Show first 5 pages for readability
+          },
+          edgeCaseTest: edgeCaseResult,
+          generatorTest: {
+            pagesProcessed: generatorPages,
+            totalItems: generatorTotal,
+            uniqueItems: seenIds.size,
+            noDuplicatesFound: generatorTotal === seenIds.size,
+            results: generatorResults
+          },
+          summary: `Boundary test: ${pageCount} pages, ${allFeeds.length}${hitSafetyLimit ? '+' : ''} feeds${hitSafetyLimit ? ` (stopped at safety limit ${safetyLimit})` : ' (reached natural boundary)'}. Edge case: ${edgeCaseResult.actualReceived} items in large request. Generator: ${generatorPages} pages, ${seenIds.size} unique items.`
+        };
+      }
+    },
+    {
+      id: 'test-entries-pagination',
+      name: 'Test Entries Pagination',
+      description: 'Test entries pagination using random feeds with sufficient entries',
+      category: 'Pagination',
+      test: async (client, currentFeedId) => {
+        console.log('Testing entries pagination with complete boundary validation...');
+        
+        console.log('📋 Gathering feed data for entry pagination testing...');
+        const feedsResponse = await client.feeds.list({ page_size: 100 });
+        
+        const feedsByEntryCount = {
+          high: feedsResponse.data.filter(f => f.total_entries >= 10),
+          medium: feedsResponse.data.filter(f => f.total_entries >= 5 && f.total_entries < 10),
+          low: feedsResponse.data.filter(f => f.total_entries >= 3 && f.total_entries < 5),
+          minimal: feedsResponse.data.filter(f => f.total_entries > 0 && f.total_entries < 3)
+        };
+        
+        console.log(`📊 Feed distribution: ${feedsByEntryCount.high.length} high-entry, ${feedsByEntryCount.medium.length} medium-entry, ${feedsByEntryCount.low.length} low-entry, ${feedsByEntryCount.minimal.length} minimal-entry feeds`);
+        
+        let selectedFeeds: any[] = [];
+        
+        if (feedsByEntryCount.high.length > 0) {
+          const randomIndex = Math.floor(Math.random() * feedsByEntryCount.high.length);
+          selectedFeeds = [feedsByEntryCount.high[randomIndex]];
+          console.log(`🎯 Selected high-entry feed for testing`);
+        } else if (feedsByEntryCount.medium.length > 0) {
+          const randomIndex = Math.floor(Math.random() * feedsByEntryCount.medium.length);
+          selectedFeeds = [feedsByEntryCount.medium[randomIndex]];
+          console.log(`🎯 Selected medium-entry feed for testing`);
+        } else if (feedsByEntryCount.low.length > 0) {
+          const shuffled = feedsByEntryCount.low.sort(() => 0.5 - Math.random());
+          selectedFeeds = shuffled.slice(0, Math.min(2, shuffled.length));
+          console.log(`🎯 Selected ${selectedFeeds.length} low-entry feeds for testing`);
+        } else if (feedsByEntryCount.minimal.length > 0) {
+          const shuffled = feedsByEntryCount.minimal.sort(() => 0.5 - Math.random());
+          selectedFeeds = shuffled.slice(0, Math.min(3, shuffled.length));
+          console.log(`🎯 Selected ${selectedFeeds.length} minimal-entry feeds for testing`);
+        }
+        
+        if (selectedFeeds.length === 0) {
+          return {
+            error: 'No feeds with entries found for pagination testing',
+            totalFeedsChecked: feedsResponse.data.length,
+            feedDistribution: feedsByEntryCount
+          };
+        }
+        
+        const feedResults: any[] = [];
+        
+        for (const feedWithEntries of selectedFeeds) {
+          console.log(`🔍 Testing feed: ${feedWithEntries.name} (${feedWithEntries.total_entries} entries)`);
+          
+          let pageCount = 0;
+          let allEntries: any[] = [];
+          let lastToken: string | undefined;
+          let hasMorePages = true;
+          const paginationDetails: any[] = [];
+
+          const pageSize = feedWithEntries.total_entries >= 5 ? 2 : 1;
+          console.log(`  Using page_size: ${pageSize} for ${feedWithEntries.total_entries} total entries`);
+
+          while (hasMorePages && pageCount < 15) {
+            const response = await client.entries.list(feedWithEntries.id, { 
+              page_size: pageSize, 
+              page_token: lastToken 
+            });
+            
+            pageCount++;
+            allEntries.push(...response.data);
+            
+            paginationDetails.push({
+              pageNumber: pageCount,
+              itemCount: response.data.length,
+              nextTokenPresent: !!response.next_page_token,
+              totalCount: response.total_count,
+              sampleTitles: response.data.slice(0, 2).map(e => e.title || 'No title'),
+              expectedMorePages: pageCount * pageSize < feedWithEntries.total_entries
+            });
+            
+            hasMorePages = !!response.next_page_token;
+            lastToken = response.next_page_token;
+          }
+
+          const largePageSize = Math.min(feedWithEntries.total_entries, 100);
+          const largePageResponse = await client.entries.list(feedWithEntries.id, { page_size: largePageSize });
+          const edgeCaseResult = {
+            feedTotalEntries: feedWithEntries.total_entries,
+            requestedPageSize: largePageSize,
+            actualReceived: largePageResponse.data.length,
+            nextTokenPresent: !!largePageResponse.next_page_token,
+            shouldMatchRequestedOrTotal: largePageResponse.data.length <= largePageSize
+          };
+
+          let generatorPages = 0;
+          let generatorTotal = 0;
+          const seenIds = new Set<string>();
+          const generatorResults: any[] = [];
+
+          for await (const batch of client.entries.paginate(feedWithEntries.id, { page_size: Math.max(1, Math.floor(feedWithEntries.total_entries / 3)) })) {
+            generatorPages++;
+            generatorTotal += batch.length;
+            
+            const hasDuplicates = batch.some(entry => seenIds.has(entry.id));
+            batch.forEach(entry => seenIds.add(entry.id));
+            
+            generatorResults.push({
+              pageNumber: generatorPages,
+              batchSize: batch.length,
+              duplicatesFound: hasDuplicates,
+              uniqueIdsTotal: seenIds.size,
+              entryTitle: batch[0]?.title || 'No title'
+            });
+            
+            if (generatorPages >= 5) break;
+          }
+          
+          feedResults.push({
+            feedInfo: {
+              id: feedWithEntries.id,
+              name: feedWithEntries.name,
+              totalEntries: feedWithEntries.total_entries
+            },
+            boundaryTest: {
+              totalPagesProcessed: pageCount,
+              totalEntriesFound: allEntries.length,
+              uniqueEntries: new Set(allEntries.map(e => e.id)).size,
+              reachedBoundary: !hasMorePages,
+              matchesExpectedTotal: allEntries.length === feedWithEntries.total_entries,
+              paginationDetails: paginationDetails.slice(0, 5)
+            },
+            edgeCaseTest: edgeCaseResult,
+            generatorTest: {
+              pagesProcessed: generatorPages,
+              totalItems: generatorTotal,
+              uniqueItems: seenIds.size,
+              noDuplicatesFound: generatorTotal === seenIds.size,
+              matchesExpectedTotal: generatorTotal === feedWithEntries.total_entries,
+              results: generatorResults
+            }
+          });
+          
+          console.log(`  ✅ Completed testing feed with ${allEntries.length}/${feedWithEntries.total_entries} entries in ${pageCount} pages`);
+        }
+        const totalEntriesTested = feedResults.reduce((sum, result) => sum + result.boundaryTest.totalEntriesFound, 0);
+        const totalPagesProcessed = feedResults.reduce((sum, result) => sum + result.boundaryTest.totalPagesProcessed, 0);
+        const allBoundariesReached = feedResults.every(result => result.boundaryTest.reachedBoundary);
+        
+        return {
+          feedDistribution: feedsByEntryCount,
+          testedFeeds: selectedFeeds.length,
+          feedResults,
+          overallStats: {
+            totalEntriesTested,
+            totalPagesProcessed,
+            allBoundariesReached,
+            averageEntriesPerFeed: Math.round(totalEntriesTested / selectedFeeds.length)
+          },
+          summary: `Tested ${selectedFeeds.length} feeds with ${totalEntriesTested} total entries across ${totalPagesProcessed} pages. Boundaries reached: ${allBoundariesReached ? 'Yes' : 'No'}.`
+        };
+      }
     }
   ];
 

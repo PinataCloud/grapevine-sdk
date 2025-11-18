@@ -3,7 +3,8 @@ import type {
   CreateFeedInput, 
   UpdateFeedInput, 
   ListFeedsQuery, 
-  PaginatedResponse 
+  PaginatedResponse,
+  ApiPaginatedResponse
 } from '../types.js';
 import type { GrapevineClient } from '../client.js';
 
@@ -64,11 +65,16 @@ export class FeedsResource {
       requiresAuth: false
     });
 
-    const data = await response.json();
+    const apiResponse = await response.json() as ApiPaginatedResponse<Feed>;
+    
+    // API confirmed to use 'data' field format - direct HTTP testing verified this
+    const feeds = apiResponse.data || [];
+    const pagination = apiResponse.pagination || { page_size: 20, next_page_token: null, has_more: false };
+    
     return {
-      data: data.feeds || [],
-      next_page_token: data.next_page_token,
-      total_count: data.total_count || 0
+      data: feeds,
+      next_page_token: pagination.next_page_token || undefined,
+      total_count: feeds.length // API doesn't provide total_count, use current batch size
     };
   }
 

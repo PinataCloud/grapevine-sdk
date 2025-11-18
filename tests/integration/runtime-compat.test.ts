@@ -125,7 +125,7 @@ describe('Runtime Compatibility Tests', () => {
       expect(packageJson.type).toBe('module');
       expect(packageJson.main).toBeDefined();
       expect(packageJson.types).toBeDefined();
-      expect(packageJson.bin).toBeDefined();
+      // Note: bin field removed as CLI is now separate Go application
     });
 
     it('should have all required dependencies', () => {
@@ -135,7 +135,6 @@ describe('Runtime Compatibility Tests', () => {
       
       // Check critical dependencies
       expect(packageJson.dependencies.viem).toBeDefined();
-      expect(packageJson.dependencies.commander).toBeDefined();
       expect(packageJson.dependencies['@coinbase/x402']).toBeDefined();
     });
   });

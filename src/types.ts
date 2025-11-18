@@ -103,6 +103,19 @@ export interface PaginatedResponse<T> {
   total_count: number;
 }
 
+// Internal API response format matching actual API (confirmed by direct testing)
+export interface ApiPaginationInfo {
+  page_size: number;
+  next_page_token: string | null;
+  has_more: boolean;
+}
+
+// This matches the REAL API format (confirmed by direct HTTP calls)
+export interface ApiPaginatedResponse<T> {
+  data: T[];
+  pagination: ApiPaginationInfo;
+}
+
 export interface Category {
   id: string;
   name: string;

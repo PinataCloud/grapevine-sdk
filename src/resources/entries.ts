@@ -3,7 +3,8 @@ import type {
   Entry,
   CreateEntryInput,
   ListEntriesQuery,
-  PaginatedResponse
+  PaginatedResponse,
+  ApiPaginatedResponse
 } from '../types.js';
 import type { GrapevineClient } from '../client.js';
 
@@ -125,11 +126,16 @@ export class EntriesResource {
       requiresAuth: false
     });
 
-    const data = await response.json();
+    const apiResponse = await response.json() as ApiPaginatedResponse<Entry>;
+    
+    // API confirmed to use 'data' field format - direct HTTP testing verified this
+    const entries = apiResponse.data || [];
+    const pagination = apiResponse.pagination || { page_size: 20, next_page_token: null, has_more: false };
+    
     return {
-      data: data.entries || data.data || [],
-      next_page_token: data.next_page_token,
-      total_count: data.total_count || data.pagination?.total || 0
+      data: entries,
+      next_page_token: pagination.next_page_token || undefined,
+      total_count: entries.length // API doesn't provide total_count, use current batch size
     };
   }
 
