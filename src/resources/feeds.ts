@@ -105,9 +105,10 @@ export class FeedsResource {
 
   /**
    * Get feeds owned by the authenticated wallet
+   * @throws {Error} If no wallet is configured
    */
   async myFeeds(): Promise<PaginatedResponse<Feed>> {
-    const walletAddress = this.client.getWalletAddress();
+    const walletAddress = this.client.getWalletAddress(); // This will throw if no wallet configured
     return this.list({ owner_wallet_address: walletAddress });
   }
 

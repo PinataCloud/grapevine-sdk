@@ -7,11 +7,13 @@ import WalletConnection from './components/WalletConnection';
 import PrivateKeyTest from './components/PrivateKeyTest';
 import WagmiTest from './components/WagmiTest';
 import TestSuite from './components/TestSuite';
+import PublicOnlyTest from './components/PublicOnlyTest';
+import InteractivePaginationTest from './components/InteractivePaginationTest';
 import '@rainbow-me/rainbowkit/styles.css';
 
 const queryClient = new QueryClient();
 
-type Tab = 'connection' | 'private-key' | 'wagmi' | 'test-suite';
+type Tab = 'connection' | 'private-key' | 'wagmi' | 'public-only' | 'pagination' | 'test-suite';
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('connection');
@@ -20,6 +22,8 @@ function App() {
     { id: 'connection', label: 'Wallet Connection', component: WalletConnection },
     { id: 'private-key', label: 'Private Key Tests', component: PrivateKeyTest },
     { id: 'wagmi', label: 'Wagmi Tests', component: WagmiTest },
+    { id: 'public-only', label: 'Public Only (No Wallet)', component: PublicOnlyTest },
+    { id: 'pagination', label: 'Interactive Pagination', component: InteractivePaginationTest },
     { id: 'test-suite', label: 'Full Test Suite', component: TestSuite },
   ];
 

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { GrapevineClient } from '@grapevine/sdk';
 
 export default function PrivateKeyTest() {
-  const [privateKey, setPrivateKey] = useState('');
+  const [privateKey, setPrivateKey] = useState(import.meta.env.VITE_PRIVATE_KEY || '');
   const [client, setClient] = useState<GrapevineClient | null>(null);
   const [network, setNetwork] = useState<'testnet' | 'mainnet'>('testnet');
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ export default function PrivateKeyTest() {
       });
       setClient(newClient);
       addResult('success', 'Client initialized', { 
-        address: newClient.getWalletAddress(),
+        address: newClient.hasWallet() ? newClient.getWalletAddress() : 'No wallet configured',
         network: newClient.getNetwork()
       });
     } catch (err) {
@@ -167,7 +167,7 @@ export default function PrivateKeyTest() {
         <div className="border rounded-lg p-4 bg-green-50 border-green-200">
           <h3 className="font-medium text-green-800 mb-2">✅ SDK Initialized</h3>
           <div className="text-sm space-y-1">
-            <div>Address: <code className="bg-green-100 px-1 rounded">{client.getWalletAddress()}</code></div>
+            <div>Address: <code className="bg-green-100 px-1 rounded">{client.hasWallet() ? client.getWalletAddress() : 'No wallet configured'}</code></div>
             <div>Network: <code className="bg-green-100 px-1 rounded">{client.getNetwork()}</code></div>
             <div>Testnet: {client.isTestNetwork() ? 'Yes' : 'No'}</div>
           </div>

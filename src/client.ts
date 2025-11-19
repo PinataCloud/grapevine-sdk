@@ -51,6 +51,7 @@ export class GrapevineClient {
     } else if (config.walletAdapter) {
       this.initializeAuthWithAdapter(config.walletAdapter);
     }
+    // Note: No wallet is provided - client will work for public endpoints only
 
     // Initialize resources
     this.feeds = new FeedsResource(this);
@@ -94,6 +95,38 @@ export class GrapevineClient {
   }
 
   /**
+   * Set or update the wallet client for authentication
+   * This allows dynamic wallet configuration after initialization
+   */
+  setWalletClient(walletAdapter: WalletAdapter): void {
+    this.initializeAuthWithAdapter(walletAdapter);
+    
+    if (this.debug) {
+      console.log('Wallet client updated:', walletAdapter.getAddress());
+    }
+  }
+
+  /**
+   * Check if a wallet is currently configured
+   */
+  hasWallet(): boolean {
+    return this.authManager !== undefined;
+  }
+
+  /**
+   * Clear the current wallet configuration
+   * Useful for logout scenarios
+   */
+  clearWallet(): void {
+    this.authManager = undefined;
+    this.paymentManager = undefined;
+    
+    if (this.debug) {
+      console.log('Wallet configuration cleared');
+    }
+  }
+
+  /**
    * Make an authenticated request to the API
    */
   async request(path: string, options: RequestOptions): Promise<Response> {
@@ -112,7 +145,7 @@ export class GrapevineClient {
     // Add auth headers if required
     if (options.requiresAuth) {
       if (!this.authManager) {
-        throw new Error('Authentication required but no private key provided');
+        throw new Error('Authentication required but no wallet configured. Use setWalletClient() to configure a wallet first.');
       }
       authHeaders = await this.authManager.getAuthHeaders();
       Object.assign(headers, authHeaders);
@@ -176,10 +209,11 @@ export class GrapevineClient {
 
   /**
    * Get current wallet address
+   * @throws {Error} If no wallet is configured
    */
   getWalletAddress(): string {
     if (!this.authManager) {
-      throw new Error('No authentication configured');
+      throw new Error('No wallet configured. Use setWalletClient() to configure a wallet first.');
     }
     return this.authManager.walletAddress;
   }

@@ -41,26 +41,35 @@ export function useGrapevine(config: {
     debug
   }), [network, debug]);
 
+  // Initialize client once when config changes
   useEffect(() => {
-    if (!walletClient || !address) {
-      setClient(null);
-      return;
-    }
-
     try {
-      // Create wagmi adapter
-      const adapter = new WagmiAdapter(walletClient, address);
-      
-      // Create Grapevine client with the adapter
       const grapevineClient = new GrapevineClient(clientConfig);
-      grapevineClient.initializeAuthWithAdapter(adapter);
-      
       setClient(grapevineClient);
     } catch (error) {
       console.error('Failed to initialize Grapevine client:', error);
       setClient(null);
     }
-  }, [walletClient, address, clientConfig]);
+  }, [clientConfig]);
+
+  // Update wallet when walletClient or address changes
+  useEffect(() => {
+    if (!client) return;
+
+    if (walletClient && address) {
+      try {
+        // Create wagmi adapter and set wallet
+        const adapter = new WagmiAdapter(walletClient, address);
+        client.setWalletClient(adapter);
+      } catch (error) {
+        console.error('Failed to set wallet client:', error);
+        client.clearWallet();
+      }
+    } else {
+      // Clear wallet if disconnected
+      client.clearWallet();
+    }
+  }, [client, walletClient, address]);
 
   return client;
 }
@@ -70,4 +79,11 @@ export function useGrapevine(config: {
  */
 export function useGrapevineReady(client: GrapevineClient | null): boolean {
   return client !== null;
+}
+
+/**
+ * Hook to check if Grapevine client has a wallet configured
+ */
+export function useGrapevineWalletReady(client: GrapevineClient | null): boolean {
+  return client !== null && client.hasWallet();
 }

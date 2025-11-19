@@ -1,7 +1,7 @@
 import type { WalletClient } from 'viem';
 
 // React hooks for wagmi integration
-export { useGrapevine, useGrapevineReady } from './use-grapevine.js';
+export { useGrapevine, useGrapevineReady, useGrapevineWalletReady } from './use-grapevine.js';
 
 // Re-export viem types that users will need
 export type { WalletClient } from 'viem';

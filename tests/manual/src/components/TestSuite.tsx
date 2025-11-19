@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useAccount, useWalletClient } from 'wagmi';
-import { GrapevineClient } from '@grapevine/sdk';
+import { GrapevineClient, WagmiAdapter } from '@grapevine/sdk';
 import { useGrapevine } from '@grapevine/sdk/react';
 
 interface TestResult {
@@ -24,7 +24,7 @@ export default function TestSuite() {
   const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
   const [authMode, setAuthMode] = useState<'wagmi' | 'private-key'>('wagmi');
-  const [privateKey, setPrivateKey] = useState('');
+  const [privateKey, setPrivateKey] = useState(import.meta.env.VITE_PRIVATE_KEY || '');
   const [network, setNetwork] = useState<'testnet' | 'mainnet'>('testnet');
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<TestResult[]>([]);
@@ -48,14 +48,22 @@ export default function TestSuite() {
 
   // Memoize private key client to prevent recreation on every render
   const privateKeyClient = useMemo(() => {
-    if (authMode !== 'private-key' || !privateKey) return null;
+    if (authMode !== 'private-key' || !privateKey) {
+      console.log('Private key client not created:', { authMode, hasPrivateKey: !!privateKey });
+      return null;
+    }
     try {
-      console.log('Creating new private key client instance');
-      return new GrapevineClient({
+      console.log('Creating new private key client instance with key:', privateKey.slice(0, 10) + '...');
+      const client = new GrapevineClient({
         privateKey,
         network,
         debug: true
       });
+      console.log('Private key client created, hasWallet:', client.hasWallet());
+      if (client.hasWallet()) {
+        console.log('Private key client wallet address:', client.getWalletAddress());
+      }
+      return client;
     } catch (error) {
       console.error('Failed to create private key client:', error);
       return null;
@@ -63,6 +71,16 @@ export default function TestSuite() {
   }, [authMode, privateKey, network]);
 
   const testClient = authMode === 'wagmi' ? grapevine : privateKeyClient;
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('TestClient updated:', {
+      authMode,
+      testClient: !!testClient,
+      hasWallet: testClient?.hasWallet(),
+      address: testClient?.hasWallet() ? testClient.getWalletAddress() : 'No wallet'
+    });
+  }, [testClient, authMode]);
 
   // Clear any old stored feed IDs on mount - we only care about current session
   useEffect(() => {
@@ -87,11 +105,137 @@ export default function TestSuite() {
       }
     },
     {
+      id: 'public-feeds-list',
+      name: 'List Public Feeds (No Auth)',
+      description: 'Test public endpoint - list feeds without authentication',
+      category: 'Public Endpoints',
+      test: async (client) => {
+        const response = await client.feeds.list({ page_size: 5 });
+        if (!response.data || !Array.isArray(response.data)) {
+          throw new Error('Invalid feeds response');
+        }
+        return {
+          count: response.data.length,
+          hasWallet: client.hasWallet(),
+          feeds: response.data.map(f => ({ id: f.id, name: f.name, owner: f.owner_wallet_address }))
+        };
+      }
+    },
+    {
+      id: 'public-feed-get',
+      name: 'Get Public Feed (No Auth)',
+      description: 'Test public endpoint - get a specific feed without authentication',
+      category: 'Public Endpoints',
+      test: async (client) => {
+        // First get a list to find a feed ID
+        const listResponse = await client.feeds.list({ page_size: 1 });
+        if (!listResponse.data || listResponse.data.length === 0) {
+          throw new Error('No feeds available to test with');
+        }
+        
+        const feedId = listResponse.data[0].id;
+        const feed = await client.feeds.get(feedId);
+        
+        return {
+          feedId,
+          feedName: feed.name,
+          hasWallet: client.hasWallet(),
+          success: true
+        };
+      }
+    },
+    {
+      id: 'public-entries-list',
+      name: 'List Public Entries (No Auth)',
+      description: 'Test public endpoint - list entries in a feed without authentication',
+      category: 'Public Endpoints',
+      test: async (client) => {
+        // First get a feed to test with
+        const feedsResponse = await client.feeds.list({ page_size: 1 });
+        if (!feedsResponse.data || feedsResponse.data.length === 0) {
+          throw new Error('No feeds available to test with');
+        }
+        
+        const feedId = feedsResponse.data[0].id;
+        const entriesResponse = await client.entries.list(feedId, { page_size: 5 });
+        
+        return {
+          feedId,
+          entryCount: entriesResponse.data.length,
+          hasWallet: client.hasWallet(),
+          entries: entriesResponse.data.map(e => ({ id: e.id, title: e.title, isFree: e.is_free }))
+        };
+      }
+    },
+    {
+      id: 'dynamic-wallet-setting',
+      name: 'Dynamic Wallet Setting Test',
+      description: 'Test setting wallet client after initialization',
+      category: 'Public Endpoints',
+      test: async (client) => {
+        const initialHasWallet = client.hasWallet();
+        let walletSetResult = 'not attempted';
+        let finalHasWallet = false;
+        
+        // Test clearing wallet if one exists
+        if (initialHasWallet) {
+          client.clearWallet();
+          const afterClear = client.hasWallet();
+          
+          // Try to set it back based on current auth mode
+          if (authMode === 'wagmi' && walletClient && address) {
+            try {
+              const adapter = new WagmiAdapter(walletClient, address);
+              client.setWalletClient(adapter);
+              finalHasWallet = client.hasWallet();
+              walletSetResult = 'success - wagmi adapter';
+            } catch (error) {
+              walletSetResult = `failed - ${(error as Error).message}`;
+              finalHasWallet = false;
+            }
+          } else if (authMode === 'private-key' && privateKey) {
+            // In private key mode, we can restore the wallet using the private key
+            try {
+              client.initializeAuth(privateKey);
+              finalHasWallet = client.hasWallet();
+              walletSetResult = 'success - restored private key';
+            } catch (error) {
+              walletSetResult = `failed to restore - ${(error as Error).message}`;
+              finalHasWallet = false;
+            }
+          } else {
+            walletSetResult = 'skipped - no active wallet connection';
+            finalHasWallet = false;
+          }
+          
+          return {
+            initialHasWallet,
+            afterClear,
+            finalHasWallet,
+            walletSetResult,
+            authMode,
+            message: `Successfully tested wallet clearing${finalHasWallet ? ' and setting' : ' (setting skipped based on auth mode)'}`
+          };
+        } else {
+          return {
+            initialHasWallet,
+            finalHasWallet: false,
+            walletSetResult: 'skipped - no initial wallet',
+            authMode,
+            message: 'No wallet to test with - this is expected for unauthenticated clients'
+          };
+        }
+      }
+    },
+    {
       id: 'wallet-info',
       name: 'Wallet Information',
       description: 'Get wallet address and network info',
-      category: 'Basic',
+      category: 'Authenticated',
       test: async (client) => {
+        if (!client.hasWallet()) {
+          throw new Error('No wallet configured. Please connect a wallet or configure a private key first.');
+        }
         const address = client.getWalletAddress();
         const network = client.getNetwork();
         const isTestnet = client.isTestNetwork();
@@ -103,7 +247,7 @@ export default function TestSuite() {
       id: 'create-feed',
       name: 'Create Feed',
       description: 'Create a new feed with authentication',
-      category: 'Feeds',
+      category: 'Authenticated',
       test: async (client) => {
         const feed = await client.feeds.create({
           name: `Test Suite Feed ${Date.now()}`,
@@ -118,8 +262,12 @@ export default function TestSuite() {
       id: 'list-feeds',
       name: 'List My Feeds',
       description: 'Retrieve feeds owned by current wallet',
-      category: 'Feeds',
+      category: 'Authenticated',
       test: async (client) => {
+        if (!client.hasWallet()) {
+          throw new Error('No wallet configured. Please connect a wallet or configure a private key first.');
+        }
+        
         // Add small delay to allow feed creation to propagate
         await new Promise(resolve => setTimeout(resolve, 1000));
         
@@ -146,16 +294,20 @@ export default function TestSuite() {
       id: 'list-all-feeds',
       name: 'List All Feeds (Debug)',
       description: 'Check if created feed appears in global list',
-      category: 'Feeds',
+      category: 'Public Endpoints',
       test: async (client) => {
         const response = await client.feeds.list({ page_size: 10 });
-        const walletAddress = client.getWalletAddress();
-        const myFeeds = response.data.filter(f => f.owner_wallet_address?.toLowerCase() === walletAddress.toLowerCase());
+        
+        let myFeeds = [];
+        if (client.hasWallet()) {
+          const walletAddress = client.getWalletAddress();
+          myFeeds = response.data.filter(f => f.owner_wallet_address?.toLowerCase() === walletAddress.toLowerCase());
+        }
         
         return {
           totalFeeds: response.data.length,
           myFeedsInGlobalList: myFeeds.length,
-          walletAddress,
+          walletAddress: client.hasWallet() ? client.getWalletAddress() : 'No wallet configured',
           myFeedsFound: myFeeds.map(f => ({ id: f.id, name: f.name, owner: f.owner_wallet_address })),
           allFeeds: response.data.map(f => ({ id: f.id, name: f.name, owner: f.owner_wallet_address }))
         };
@@ -165,29 +317,45 @@ export default function TestSuite() {
       id: 'get-feed',
       name: 'Get Specific Feed',
       description: 'Retrieve feed details by ID',
-      category: 'Feeds',
+      category: 'Public Endpoints',
       test: async (client, currentFeedId) => {
-        console.log('Get Specific Feed test - currentFeedId passed:', currentFeedId);
-        console.log('Get Specific Feed test - closure createdFeedId:', createdFeedId);
-        if (!currentFeedId) {
-          throw new Error('No feed available. Run "Create Feed" test first, or click "Run All Tests" for automatic setup.');
+        // If we have a created feed, use it; otherwise find any existing feed
+        let feedIdToUse = currentFeedId;
+        
+        if (!feedIdToUse) {
+          // Find any existing feed from the API
+          const feedsList = await client.feeds.list({ page_size: 1 });
+          if (feedsList.data.length === 0) {
+            throw new Error('No feeds available in the system to test with. Create a feed first.');
+          }
+          feedIdToUse = feedsList.data[0].id;
         }
         
-        const feed = await client.feeds.get(currentFeedId);
-        if (feed.id !== currentFeedId) throw new Error('Retrieved wrong feed');
-        return feed;
+        const feed = await client.feeds.get(feedIdToUse);
+        if (feed.id !== feedIdToUse) throw new Error('Retrieved wrong feed');
+        
+        return {
+          feedId: feedIdToUse,
+          name: feed.name,
+          owner: feed.owner_wallet_address,
+          totalEntries: feed.total_entries,
+          usedCreatedFeed: !!currentFeedId,
+          message: currentFeedId ? 'Used created feed' : 'Used existing feed from API'
+        };
       }
     },
     {
       id: 'create-entry',
       name: 'Create Entry',
       description: 'Create a new entry in a feed',
-      category: 'Entries',
+      category: 'Authenticated',
       test: async (client, currentFeedId) => {
-        console.log('Create Entry test - currentFeedId passed:', currentFeedId);
-        console.log('Create Entry test - closure createdFeedId:', createdFeedId);
+        if (!client.hasWallet()) {
+          throw new Error('No wallet configured. Please connect a wallet or configure a private key first.');
+        }
+        
         if (!currentFeedId) {
-          throw new Error('No feed available. Run "Create Feed" test first, or click "Run All Tests" for automatic setup.');
+          throw new Error('No feed available. You must create a feed first before creating entries (entries can only be created in feeds you own).');
         }
         
         const timestamp = Date.now();
@@ -205,18 +373,25 @@ export default function TestSuite() {
       id: 'list-feed-entries',
       name: 'List Feed Entries',
       description: 'Get entries for a specific feed',
-      category: 'Entries',
+      category: 'Public Endpoints',
       test: async (client, currentFeedId) => {
-        console.log('List Feed Entries test - currentFeedId passed:', currentFeedId);
-        console.log('List Feed Entries test - closure createdFeedId:', createdFeedId);
-        if (!currentFeedId) {
-          throw new Error('No feed available. Run "Create Feed" test first, or click "Run All Tests" for automatic setup.');
+        // If we have a created feed, use it; otherwise find any existing feed
+        let feedIdToUse = currentFeedId;
+        
+        if (!feedIdToUse) {
+          // Find any existing feed from the API
+          const feedsList = await client.feeds.list({ page_size: 5 });
+          if (feedsList.data.length === 0) {
+            throw new Error('No feeds available in the system to test with.');
+          }
+          feedIdToUse = feedsList.data[0].id;
         }
         
-        const entriesResponse = await client.entries.list(currentFeedId, { page_size: 5 });
+        const entriesResponse = await client.entries.list(feedIdToUse, { page_size: 5 });
         return {
-          feedId: currentFeedId,
+          feedId: feedIdToUse,
           entryCount: entriesResponse.data.length,
+          usedCreatedFeed: !!currentFeedId,
           total: entriesResponse.total_count,
           entries: entriesResponse.data.map(e => ({ id: e.id, title: e.title }))
         };
@@ -224,260 +399,83 @@ export default function TestSuite() {
     },
     {
       id: 'test-feeds-pagination',
-      name: 'Test Feeds Pagination',
-      description: 'Test feeds pagination with complete boundary validation',
+      name: 'Automated Feeds Pagination',
+      description: 'Quick automated test of feeds pagination (use Interactive Pagination tab for manual testing)',
       category: 'Pagination',
       test: async (client) => {
-        console.log('Testing feeds pagination with complete boundary validation...');
-        
-        // Test 1: Complete pagination cycle until next_page_token is null
+        // Test first 2 pages
         let pageCount = 0;
-        let allFeeds: any[] = [];
+        let totalItems = 0;
         let lastToken: string | undefined;
-        let hasMorePages = true;
-        const paginationDetails: any[] = [];
-
-        const safetyLimit = 25; // Increased limit to allow more thorough testing
-        let hitSafetyLimit = false;
+        const maxPages = 2;
         
-        while (hasMorePages && pageCount < safetyLimit) {
+        while (pageCount < maxPages) {
           const response = await client.feeds.list({ 
-            page_size: 4, 
+            page_size: 5, 
             page_token: lastToken 
           });
           
           pageCount++;
-          allFeeds.push(...response.data);
-          
-          paginationDetails.push({
-            pageNumber: pageCount,
-            itemCount: response.data.length,
-            nextTokenPresent: !!response.next_page_token,
-            totalCount: response.total_count,
-            sampleIds: response.data.slice(0, 2).map(f => f.id)
-          });
-          
-          hasMorePages = !!response.next_page_token;
+          totalItems += response.data.length;
           lastToken = response.next_page_token;
-        }
-        
-        // Check if we stopped due to safety limit rather than natural boundary
-        hitSafetyLimit = pageCount >= safetyLimit && hasMorePages;
-
-        // Test 2: Edge case with maximum page_size (API limit is 100)
-        const largePageResponse = await client.feeds.list({ page_size: 100 });
-        const edgeCaseResult = {
-          requestedPageSize: 100,
-          actualReceived: largePageResponse.data.length,
-          nextTokenPresent: !!largePageResponse.next_page_token,
-          reachedMaxLimit: largePageResponse.data.length <= 100
-        };
-
-        // Test 3: Generator exhaustion test (limited for manual testing)
-        let generatorPages = 0;
-        let generatorTotal = 0;
-        const seenIds = new Set<string>();
-        const generatorResults: any[] = [];
-
-        for await (const batch of client.feeds.paginate({ page_size: 5 })) {
-          generatorPages++;
-          generatorTotal += batch.length;
           
-          const hasDuplicates = batch.some(feed => seenIds.has(feed.id));
-          batch.forEach(feed => seenIds.add(feed.id));
-          
-          generatorResults.push({
-            pageNumber: generatorPages,
-            batchSize: batch.length,
-            duplicatesFound: hasDuplicates,
-            uniqueIdsTotal: seenIds.size
-          });
-          
-          if (generatorPages >= 5) break; // Limit for manual testing
+          if (!response.next_page_token) break;
         }
         
         return {
-          boundaryTest: {
-            totalPagesProcessed: pageCount,
-            totalFeedsFound: allFeeds.length,
-            uniqueFeeds: new Set(allFeeds.map(f => f.id)).size,
-            reachedBoundary: !hasMorePages && !hitSafetyLimit,
-            hitSafetyLimit,
-            safetyLimit,
-            estimatedTotalFeeds: hitSafetyLimit ? `${allFeeds.length}+` : allFeeds.length,
-            paginationDetails: paginationDetails.slice(0, 5) // Show first 5 pages for readability
-          },
-          edgeCaseTest: edgeCaseResult,
-          generatorTest: {
-            pagesProcessed: generatorPages,
-            totalItems: generatorTotal,
-            uniqueItems: seenIds.size,
-            noDuplicatesFound: generatorTotal === seenIds.size,
-            results: generatorResults
-          },
-          summary: `Boundary test: ${pageCount} pages, ${allFeeds.length}${hitSafetyLimit ? '+' : ''} feeds${hitSafetyLimit ? ` (stopped at safety limit ${safetyLimit})` : ' (reached natural boundary)'}. Edge case: ${edgeCaseResult.actualReceived} items in large request. Generator: ${generatorPages} pages, ${seenIds.size} unique items.`
+          pagesLoaded: pageCount,
+          totalItems,
+          hasMoreAvailable: !!lastToken,
+          message: `Loaded ${pageCount} pages with ${totalItems} total items. ${lastToken ? 'More pages available' : 'Reached end'}. For interactive testing, use the "Interactive Pagination" tab.`
         };
       }
     },
     {
       id: 'test-entries-pagination',
-      name: 'Test Entries Pagination',
-      description: 'Test entries pagination using random feeds with sufficient entries',
+      name: 'Automated Entries Pagination',
+      description: 'Quick automated test of entries pagination (use Interactive Pagination tab for manual testing)',
       category: 'Pagination',
       test: async (client, currentFeedId) => {
-        console.log('Testing entries pagination with complete boundary validation...');
+        // Find a feed with entries to test
+        const feedsResponse = await client.feeds.list({ page_size: 10 });
+        const feedWithEntries = feedsResponse.data.find(f => f.total_entries > 0);
         
-        console.log('📋 Gathering feed data for entry pagination testing...');
-        const feedsResponse = await client.feeds.list({ page_size: 100 });
-        
-        const feedsByEntryCount = {
-          high: feedsResponse.data.filter(f => f.total_entries >= 10),
-          medium: feedsResponse.data.filter(f => f.total_entries >= 5 && f.total_entries < 10),
-          low: feedsResponse.data.filter(f => f.total_entries >= 3 && f.total_entries < 5),
-          minimal: feedsResponse.data.filter(f => f.total_entries > 0 && f.total_entries < 3)
-        };
-        
-        console.log(`📊 Feed distribution: ${feedsByEntryCount.high.length} high-entry, ${feedsByEntryCount.medium.length} medium-entry, ${feedsByEntryCount.low.length} low-entry, ${feedsByEntryCount.minimal.length} minimal-entry feeds`);
-        
-        let selectedFeeds: any[] = [];
-        
-        if (feedsByEntryCount.high.length > 0) {
-          const randomIndex = Math.floor(Math.random() * feedsByEntryCount.high.length);
-          selectedFeeds = [feedsByEntryCount.high[randomIndex]];
-          console.log(`🎯 Selected high-entry feed for testing`);
-        } else if (feedsByEntryCount.medium.length > 0) {
-          const randomIndex = Math.floor(Math.random() * feedsByEntryCount.medium.length);
-          selectedFeeds = [feedsByEntryCount.medium[randomIndex]];
-          console.log(`🎯 Selected medium-entry feed for testing`);
-        } else if (feedsByEntryCount.low.length > 0) {
-          const shuffled = feedsByEntryCount.low.sort(() => 0.5 - Math.random());
-          selectedFeeds = shuffled.slice(0, Math.min(2, shuffled.length));
-          console.log(`🎯 Selected ${selectedFeeds.length} low-entry feeds for testing`);
-        } else if (feedsByEntryCount.minimal.length > 0) {
-          const shuffled = feedsByEntryCount.minimal.sort(() => 0.5 - Math.random());
-          selectedFeeds = shuffled.slice(0, Math.min(3, shuffled.length));
-          console.log(`🎯 Selected ${selectedFeeds.length} minimal-entry feeds for testing`);
-        }
-        
-        if (selectedFeeds.length === 0) {
+        if (!feedWithEntries) {
           return {
-            error: 'No feeds with entries found for pagination testing',
-            totalFeedsChecked: feedsResponse.data.length,
-            feedDistribution: feedsByEntryCount
+            message: 'No feeds with entries found for pagination testing',
+            totalFeedsChecked: feedsResponse.data.length
           };
         }
         
-        const feedResults: any[] = [];
+        // Test first 2 pages
+        let pageCount = 0;
+        let totalItems = 0;
+        let lastToken: string | undefined;
+        const maxPages = 2;
         
-        for (const feedWithEntries of selectedFeeds) {
-          console.log(`🔍 Testing feed: ${feedWithEntries.name} (${feedWithEntries.total_entries} entries)`);
-          
-          let pageCount = 0;
-          let allEntries: any[] = [];
-          let lastToken: string | undefined;
-          let hasMorePages = true;
-          const paginationDetails: any[] = [];
-
-          const pageSize = feedWithEntries.total_entries >= 5 ? 2 : 1;
-          console.log(`  Using page_size: ${pageSize} for ${feedWithEntries.total_entries} total entries`);
-
-          while (hasMorePages && pageCount < 15) {
-            const response = await client.entries.list(feedWithEntries.id, { 
-              page_size: pageSize, 
-              page_token: lastToken 
-            });
-            
-            pageCount++;
-            allEntries.push(...response.data);
-            
-            paginationDetails.push({
-              pageNumber: pageCount,
-              itemCount: response.data.length,
-              nextTokenPresent: !!response.next_page_token,
-              totalCount: response.total_count,
-              sampleTitles: response.data.slice(0, 2).map(e => e.title || 'No title'),
-              expectedMorePages: pageCount * pageSize < feedWithEntries.total_entries
-            });
-            
-            hasMorePages = !!response.next_page_token;
-            lastToken = response.next_page_token;
-          }
-
-          const largePageSize = Math.min(feedWithEntries.total_entries, 100);
-          const largePageResponse = await client.entries.list(feedWithEntries.id, { page_size: largePageSize });
-          const edgeCaseResult = {
-            feedTotalEntries: feedWithEntries.total_entries,
-            requestedPageSize: largePageSize,
-            actualReceived: largePageResponse.data.length,
-            nextTokenPresent: !!largePageResponse.next_page_token,
-            shouldMatchRequestedOrTotal: largePageResponse.data.length <= largePageSize
-          };
-
-          let generatorPages = 0;
-          let generatorTotal = 0;
-          const seenIds = new Set<string>();
-          const generatorResults: any[] = [];
-
-          for await (const batch of client.entries.paginate(feedWithEntries.id, { page_size: Math.max(1, Math.floor(feedWithEntries.total_entries / 3)) })) {
-            generatorPages++;
-            generatorTotal += batch.length;
-            
-            const hasDuplicates = batch.some(entry => seenIds.has(entry.id));
-            batch.forEach(entry => seenIds.add(entry.id));
-            
-            generatorResults.push({
-              pageNumber: generatorPages,
-              batchSize: batch.length,
-              duplicatesFound: hasDuplicates,
-              uniqueIdsTotal: seenIds.size,
-              entryTitle: batch[0]?.title || 'No title'
-            });
-            
-            if (generatorPages >= 5) break;
-          }
-          
-          feedResults.push({
-            feedInfo: {
-              id: feedWithEntries.id,
-              name: feedWithEntries.name,
-              totalEntries: feedWithEntries.total_entries
-            },
-            boundaryTest: {
-              totalPagesProcessed: pageCount,
-              totalEntriesFound: allEntries.length,
-              uniqueEntries: new Set(allEntries.map(e => e.id)).size,
-              reachedBoundary: !hasMorePages,
-              matchesExpectedTotal: allEntries.length === feedWithEntries.total_entries,
-              paginationDetails: paginationDetails.slice(0, 5)
-            },
-            edgeCaseTest: edgeCaseResult,
-            generatorTest: {
-              pagesProcessed: generatorPages,
-              totalItems: generatorTotal,
-              uniqueItems: seenIds.size,
-              noDuplicatesFound: generatorTotal === seenIds.size,
-              matchesExpectedTotal: generatorTotal === feedWithEntries.total_entries,
-              results: generatorResults
-            }
+        while (pageCount < maxPages) {
+          const response = await client.entries.list(feedWithEntries.id, { 
+            page_size: 3, 
+            page_token: lastToken 
           });
           
-          console.log(`  ✅ Completed testing feed with ${allEntries.length}/${feedWithEntries.total_entries} entries in ${pageCount} pages`);
+          pageCount++;
+          totalItems += response.data.length;
+          lastToken = response.next_page_token;
+          
+          if (!response.next_page_token) break;
         }
-        const totalEntriesTested = feedResults.reduce((sum, result) => sum + result.boundaryTest.totalEntriesFound, 0);
-        const totalPagesProcessed = feedResults.reduce((sum, result) => sum + result.boundaryTest.totalPagesProcessed, 0);
-        const allBoundariesReached = feedResults.every(result => result.boundaryTest.reachedBoundary);
         
         return {
-          feedDistribution: feedsByEntryCount,
-          testedFeeds: selectedFeeds.length,
-          feedResults,
-          overallStats: {
-            totalEntriesTested,
-            totalPagesProcessed,
-            allBoundariesReached,
-            averageEntriesPerFeed: Math.round(totalEntriesTested / selectedFeeds.length)
+          testedFeed: {
+            id: feedWithEntries.id,
+            name: feedWithEntries.name,
+            totalEntries: feedWithEntries.total_entries
           },
-          summary: `Tested ${selectedFeeds.length} feeds with ${totalEntriesTested} total entries across ${totalPagesProcessed} pages. Boundaries reached: ${allBoundariesReached ? 'Yes' : 'No'}.`
+          pagesLoaded: pageCount,
+          totalItems,
+          hasMoreAvailable: !!lastToken,
+          message: `Tested feed "${feedWithEntries.name}" with ${feedWithEntries.total_entries} entries. Loaded ${pageCount} pages with ${totalItems} items. ${lastToken ? 'More pages available' : 'Reached end'}. For interactive testing, use the "Interactive Pagination" tab.`
         };
       }
     }
@@ -665,7 +663,7 @@ export default function TestSuite() {
         {testClient && (
           <div className="text-sm space-y-1">
             <div>Mode: {authMode}</div>
-            <div>Address: <code>{testClient.getWalletAddress()}</code></div>
+            <div>Address: <code>{testClient.hasWallet() ? testClient.getWalletAddress() : 'No wallet configured'}</code></div>
             <div>Network: {testClient.getNetwork()}</div>
             <div>Feed ID: {createdFeedId ? <code className="text-green-700">{createdFeedId}</code> : <span className="text-gray-500">None (create feed first)</span>}</div>
           </div>

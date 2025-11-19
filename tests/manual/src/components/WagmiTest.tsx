@@ -192,7 +192,7 @@ export default function WagmiTest() {
             {grapevine && (
               <>
                 <div>Network: {grapevine.getNetwork()}</div>
-                <div>Address: <code className="text-xs">{grapevine.getWalletAddress()?.slice(0, 8)}...</code></div>
+                <div>Address: <code className="text-xs">{grapevine.hasWallet() ? grapevine.getWalletAddress()?.slice(0, 8) + '...' : 'No wallet configured'}</code></div>
               </>
             )}
           </div>
