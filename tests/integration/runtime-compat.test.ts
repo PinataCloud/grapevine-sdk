@@ -142,7 +142,7 @@ describe('Runtime Compatibility Tests', () => {
   describe('Error Handling', () => {
     it('should handle missing private key gracefully', () => {
       const client = new GrapevineClient();
-      expect(() => client.getWalletAddress()).toThrow('No authentication configured');
+      expect(() => client.getWalletAddress()).toThrow('No wallet configured. Use setWalletClient() to configure a wallet first.');
     });
 
     it('should handle invalid private key format', () => {
