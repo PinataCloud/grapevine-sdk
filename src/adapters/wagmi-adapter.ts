@@ -9,12 +9,15 @@ export class WagmiAdapter implements WalletAdapter {
   private address: string;
   private chainId: string;
 
-  constructor(walletClient: WalletClient, address: string) {
+  constructor(walletClient: WalletClient) {
     if (!walletClient) {
       throw new Error('WalletClient is required');
     }
+    
+    // Extract address from wallet client account
+    const address = walletClient.account?.address;
     if (!address) {
-      throw new Error('Wallet address is required');
+      throw new Error('Wallet address not available from wallet client account');
     }
 
     this.walletClient = walletClient;

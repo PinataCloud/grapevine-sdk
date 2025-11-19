@@ -10,15 +10,13 @@ import type { GrapevineConfig } from '../types.js';
  * @example
  * ```tsx
  * import { useGrapevine } from '@pinata/grapevine-sdk/react';
- * import { useWalletClient, useAccount } from 'wagmi';
+ * import { useWalletClient } from 'wagmi';
  * 
  * function MyComponent() {
  *   const { data: walletClient } = useWalletClient();
- *   const { address } = useAccount();
  *   
  *   const grapevine = useGrapevine({
  *     walletClient,
- *     address,
  *     network: 'testnet'
  *   });
  *   
@@ -28,11 +26,10 @@ import type { GrapevineConfig } from '../types.js';
  */
 export function useGrapevine(config: {
   walletClient: WalletClient | undefined;
-  address: string | undefined;
   network?: 'testnet' | 'mainnet';
   debug?: boolean;
 }): GrapevineClient | null {
-  const { walletClient, address, network = 'testnet', debug = false } = config;
+  const { walletClient, network = 'testnet', debug = false } = config;
   const [client, setClient] = useState<GrapevineClient | null>(null);
 
   // Create the client configuration
@@ -52,14 +49,14 @@ export function useGrapevine(config: {
     }
   }, [clientConfig]);
 
-  // Update wallet when walletClient or address changes
+  // Update wallet when walletClient changes
   useEffect(() => {
     if (!client) return;
 
-    if (walletClient && address) {
+    if (walletClient) {
       try {
         // Create wagmi adapter and set wallet
-        const adapter = new WagmiAdapter(walletClient, address);
+        const adapter = new WagmiAdapter(walletClient);
         client.setWalletClient(adapter);
       } catch (error) {
         console.error('Failed to set wallet client:', error);
@@ -69,7 +66,7 @@ export function useGrapevine(config: {
       // Clear wallet if disconnected
       client.clearWallet();
     }
-  }, [client, walletClient, address]);
+  }, [client, walletClient]);
 
   return client;
 }

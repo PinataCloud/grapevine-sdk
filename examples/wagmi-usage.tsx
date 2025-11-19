@@ -15,7 +15,6 @@ export function GrapevineWithWagmi() {
   // Initialize Grapevine client with wagmi
   const grapevine = useGrapevine({
     walletClient,
-    address,
     network: 'testnet', // or 'mainnet'
     debug: true
   });
@@ -166,11 +165,9 @@ export function GrapevineWithWagmi() {
  */
 export function SimpleGrapevineExample() {
   const { data: walletClient } = useWalletClient();
-  const { address } = useAccount();
   
   const grapevine = useGrapevine({
     walletClient,
-    address,
     network: 'testnet'
   });
 

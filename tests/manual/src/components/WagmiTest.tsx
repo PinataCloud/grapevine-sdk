@@ -13,9 +13,9 @@ export default function WagmiTest() {
 
   // Initialize Grapevine with wagmi
   useEffect(() => {
-    if (walletClient && address) {
+    if (walletClient) {
       try {
-        const adapter = new WagmiAdapter(walletClient, address);
+        const adapter = new WagmiAdapter(walletClient);
         const client = new GrapevineClient({
           walletAdapter: adapter,
           network,
@@ -32,7 +32,7 @@ export default function WagmiTest() {
       setGrapevine(null);
       setIsGrapevineReady(false);
     }
-  }, [walletClient, address, network]);
+  }, [walletClient, network]);
 
   const addResult = (type: 'success' | 'error' | 'info', message: string, data?: any) => {
     setResults(prev => [...prev, {

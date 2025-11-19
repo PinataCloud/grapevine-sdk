@@ -39,10 +39,9 @@ export default function TestSuite() {
   // Memoize wagmi client configuration to prevent recreation
   const grapevineConfig = useMemo(() => ({
     walletClient: authMode === 'wagmi' ? walletClient : undefined,
-    address: authMode === 'wagmi' ? address : undefined,
     network,
     debug: true
-  }), [authMode, walletClient, address, network]);
+  }), [authMode, walletClient, network]);
 
   const grapevine = useGrapevine(grapevineConfig);
 
@@ -183,9 +182,9 @@ export default function TestSuite() {
           const afterClear = client.hasWallet();
           
           // Try to set it back based on current auth mode
-          if (authMode === 'wagmi' && walletClient && address) {
+          if (authMode === 'wagmi' && walletClient) {
             try {
-              const adapter = new WagmiAdapter(walletClient, address);
+              const adapter = new WagmiAdapter(walletClient);
               client.setWalletClient(adapter);
               finalHasWallet = client.hasWallet();
               walletSetResult = 'success - wagmi adapter';
