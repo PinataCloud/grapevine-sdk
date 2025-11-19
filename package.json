@@ -59,7 +59,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/PinataCloud/grapevine-sdk.git"
+    "url": "git+https://github.com/PinataCloud/grapevine-sdk.git"
   },
   "homepage": "https://github.com/PinataCloud/grapevine-sdk#readme",
   "bugs": {

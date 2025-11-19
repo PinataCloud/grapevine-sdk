@@ -9,7 +9,7 @@ import type { GrapevineConfig } from '../types.js';
  * 
  * @example
  * ```tsx
- * import { useGrapevine } from '@grapevine/sdk/react';
+ * import { useGrapevine } from '@pinata/grapevine-sdk/react';
  * import { useWalletClient, useAccount } from 'wagmi';
  * 
  * function MyComponent() {
