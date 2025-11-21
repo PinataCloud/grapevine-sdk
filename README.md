@@ -173,12 +173,23 @@ const grapevine = new GrapevineClient({
 
 #### Create Feed
 ```typescript
+// Simple feed without category
 const feed = await grapevine.feeds.create({
-  name: 'Feed Name',
-  description: 'Optional description',
+  name: 'My Feed',
+  description: 'A simple feed',
+  tags: ['example']
+});
+
+// Feed with category (must be valid UUID from /v1/categories)
+const categories = await grapevine.getCategories();
+const businessCategory = categories.find(c => c.name === 'Business');
+
+const feedWithCategory = await grapevine.feeds.create({
+  name: 'Categorized Feed',
+  description: 'A feed with a category',
   tags: ['tag1', 'tag2'],
-  category_id: 'category-uuid',  // Optional
-  image_url: 'https://...'       // Optional
+  category_id: businessCategory?.id,  // Optional - must be valid UUID from /v1/categories
+  image_url: 'https://...'           // Optional
 });
 ```
 
@@ -316,11 +327,28 @@ for await (const batch of grapevine.entries.paginate('feed-id', { is_free: true 
 ### Categories
 
 ```typescript
+// Get all available categories
 const categories = await grapevine.getCategories();
 categories.forEach(cat => {
-  console.log(`${cat.name}: ${cat.description}`);
+  console.log(`${cat.name} (${cat.id}): ${cat.description}`);
 });
+
+// Create feed with a specific category
+const businessCategory = categories.find(c => c.name === 'Business');
+if (businessCategory) {
+  const categorizedFeed = await grapevine.feeds.create({
+    name: 'Business Updates',
+    category_id: businessCategory.id,  // Must be valid UUID from getCategories()
+    tags: ['business', 'news']
+  });
+}
 ```
+
+**Category Validation:**
+- `category_id` is **optional** - feeds can be created without it
+- When provided, must be a valid UUID from `/v1/categories` endpoint  
+- Empty strings or invalid UUIDs will be rejected with validation error
+- Non-existent category UUIDs will be rejected
 
 ## React Integration
 

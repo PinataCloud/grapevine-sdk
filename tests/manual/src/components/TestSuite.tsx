@@ -243,6 +243,136 @@ export default function TestSuite() {
       }
     },
     {
+      id: 'create-feed-no-category',
+      name: 'Create Feed (No Category)',
+      description: 'Create a new feed without category_id to verify it\'s optional',
+      category: 'Category Validation',
+      test: async (client) => {
+        const feed = await client.feeds.create({
+          name: `Test Suite Feed No Category ${Date.now()}`,
+          description: 'Automated test feed without category',
+          tags: ['test', 'automated', 'no-category', authMode]
+        });
+        if (!feed.id) throw new Error('Feed creation failed - no ID returned');
+        return { 
+          ...feed, 
+          categoryProvided: 'none',
+          message: 'Successfully created feed without category_id' 
+        };
+      }
+    },
+    {
+      id: 'create-feed-with-category',
+      name: 'Create Feed (With Valid Category)',
+      description: 'Create a feed with a valid category_id from /v1/categories',
+      category: 'Category Validation',
+      test: async (client) => {
+        // First get available categories
+        const categories = await client.getCategories();
+        if (!categories.length) throw new Error('No categories available');
+        
+        const businessCategory = categories.find(c => c.name === 'Business') || categories[0];
+        
+        const feed = await client.feeds.create({
+          name: `Test Suite Feed With Category ${Date.now()}`,
+          description: 'Automated test feed with valid category',
+          tags: ['test', 'automated', 'with-category', authMode],
+          category_id: businessCategory.id
+        });
+        if (!feed.id) throw new Error('Feed creation failed - no ID returned');
+        return { 
+          ...feed, 
+          categoryProvided: businessCategory.name,
+          categoryId: businessCategory.id,
+          message: `Successfully created feed with category: ${businessCategory.name}` 
+        };
+      }
+    },
+    {
+      id: 'create-feed-empty-category',
+      name: 'Create Feed (Empty String Category)',
+      description: 'Test validation - should fail with empty string category_id',
+      category: 'Category Validation',
+      test: async (client) => {
+        try {
+          const feed = await client.feeds.create({
+            name: `Test Suite Feed Empty Category ${Date.now()}`,
+            description: 'This should fail - empty category',
+            tags: ['test', 'automated', 'empty-category', authMode],
+            category_id: ''
+          });
+          throw new Error('Expected validation error but feed was created successfully');
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('Invalid UUID') || errorMessage.includes('ZodError')) {
+            return {
+              expectedFailure: true,
+              error: errorMessage,
+              message: 'Correctly rejected empty string category_id with UUID validation error'
+            };
+          } else {
+            throw new Error(`Unexpected error type: ${errorMessage}`);
+          }
+        }
+      }
+    },
+    {
+      id: 'create-feed-invalid-category',
+      name: 'Create Feed (Invalid UUID Category)',
+      description: 'Test validation - should fail with invalid UUID format',
+      category: 'Category Validation',
+      test: async (client) => {
+        try {
+          const feed = await client.feeds.create({
+            name: `Test Suite Feed Invalid Category ${Date.now()}`,
+            description: 'This should fail - invalid UUID',
+            tags: ['test', 'automated', 'invalid-category', authMode],
+            category_id: 'invalid-uuid-string'
+          });
+          throw new Error('Expected validation error but feed was created successfully');
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('Invalid UUID') || errorMessage.includes('ZodError')) {
+            return {
+              expectedFailure: true,
+              error: errorMessage,
+              message: 'Correctly rejected invalid UUID format with validation error'
+            };
+          } else {
+            throw new Error(`Unexpected error type: ${errorMessage}`);
+          }
+        }
+      }
+    },
+    {
+      id: 'create-feed-nonexistent-category',
+      name: 'Create Feed (Non-existent Category)',
+      description: 'Test validation - should fail with valid UUID but non-existent category',
+      category: 'Category Validation',
+      test: async (client) => {
+        try {
+          const feed = await client.feeds.create({
+            name: `Test Suite Feed Non-existent Category ${Date.now()}`,
+            description: 'This should fail - non-existent category UUID',
+            tags: ['test', 'automated', 'nonexistent-category', authMode],
+            category_id: '123e4567-e89b-12d3-a456-426614174000' // Valid UUID format but doesn't exist
+          });
+          throw new Error('Expected validation error but feed was created successfully');
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('Invalid category_id') || errorMessage.includes('Category does not exist')) {
+            return {
+              expectedFailure: true,
+              error: errorMessage,
+              message: 'Correctly rejected non-existent category UUID with business logic error'
+            };
+          } else {
+            throw new Error(`Unexpected error type: ${errorMessage}`);
+          }
+        }
+      }
+    },
+    {
       id: 'create-feed',
       name: 'Create Feed',
       description: 'Create a new feed with authentication',
@@ -516,8 +646,8 @@ export default function TestSuite() {
       const data = await testCase.test(testClient, currentFeedId);
       const duration = Date.now() - startTime;
       
-      // If this is the create feed test, immediately update the ref
-      if (testCase.id === 'create-feed' && data && data.id) {
+      // If this is any create feed test, immediately update the ref with the first successful one
+      if (testCase.id.startsWith('create-feed') && data && data.id && !currentFeedIdRef.current) {
         console.log('Setting feed ID in ref:', data.id);
         currentFeedIdRef.current = data.id;
         setCreatedFeedId(data.id);
