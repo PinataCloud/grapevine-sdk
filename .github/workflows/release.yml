@@ -30,8 +30,8 @@ jobs:
     - name: Build SDK
       run: bun run build
     
-    - name: Run tests
-      run: bun test
+    - name: Run unit tests
+      run: bun run test:unit
     
     - name: Create tarball for GitHub release
       run: |

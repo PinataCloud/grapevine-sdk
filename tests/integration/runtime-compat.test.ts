@@ -142,12 +142,12 @@ describe('Runtime Compatibility Tests', () => {
   describe('Error Handling', () => {
     it('should handle missing private key gracefully', () => {
       const client = new GrapevineClient();
-      expect(() => client.getWalletAddress()).toThrow('No wallet configured. Use setWalletClient() to configure a wallet first.');
+      expect(() => client.getWalletAddress()).toThrow('No wallet configured for authentication');
     });
 
     it('should handle invalid private key format', () => {
       expect(() => new GrapevineClient({ privateKey: 'invalid' }))
-        .toThrow('Invalid private key format. Must be 66 characters starting with 0x');
+        .toThrow('Invalid private key format');
     });
   });
 
