@@ -9,9 +9,9 @@
 const UUID_REGEX = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
 
 /**
- * URL validation regex (basic validation)
+ * URL validation regex (supports http/https URLs and data URLs)
  */
-const URL_REGEX = /^https?:\/\/.+/;
+const URL_REGEX = /^(https?:\/\/.+|data:.+)/;
 
 export class ValidationError extends Error {
   constructor(field: string, value: any, expectedType: string, suggestion?: string) {
@@ -110,7 +110,7 @@ export function validateOptionalURL(field: string, value: any): string | undefin
       field, 
       value, 
       'URL string',
-      'Provide a valid URL string starting with http:// or https://'
+      'Provide a valid URL string (http://, https://, or data:)'
     );
   }
   
@@ -118,8 +118,8 @@ export function validateOptionalURL(field: string, value: any): string | undefin
     throw new ValidationError(
       field, 
       value, 
-      'valid URL starting with http:// or https://',
-      'Ensure the URL is properly formatted with protocol'
+      'valid URL (http://, https://, or data:)',
+      'Ensure the URL is properly formatted with a supported protocol'
     );
   }
   
