@@ -2,6 +2,7 @@ import { createWalletClient, http, type WalletClient } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { base, baseSepolia } from 'viem/chains';
 import type { WalletAdapter } from './wallet-adapter.js';
+import { AuthError } from '../errors.js';
 
 /**
  * Wallet adapter implementation for private key authentication
@@ -13,7 +14,7 @@ export class PrivateKeyAdapter implements WalletAdapter {
 
   constructor(privateKey: string, isTestnet: boolean) {
     if (!privateKey.startsWith('0x')) {
-      throw new Error('Private key must start with 0x');
+      throw AuthError.invalidPrivateKey(privateKey);
     }
 
     this.account = privateKeyToAccount(privateKey as `0x${string}`);

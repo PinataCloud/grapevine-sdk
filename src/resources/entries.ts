@@ -14,6 +14,7 @@ import {
   validateOptionalTimestamp,
   validateOptionalBoolean
 } from '../validation.js';
+import { ContentError, ErrorCode } from '../errors.js';
 
 export class EntriesResource {
   constructor(private client: GrapevineClient) {}
@@ -26,28 +27,38 @@ export class EntriesResource {
     // Validate required fields
     validateRequiredString('feedId', feedId);
     
-    // Debug logging
-    console.log('Entry create validation:', {
-      hasContent: !!input.content,
-      contentType: typeof input.content,
-      contentValue: input.content,
-      hasContentBase64: !!input.content_base64,
-      contentBase64Type: typeof input.content_base64,
-      contentBase64Length: input.content_base64?.length || 'N/A'
-    });
-    
-    // Validate that either content or content_base64 is provided
+    // Enhanced content validation with detailed error messages
     if (!input.content && !input.content_base64) {
-      throw new Error('Invalid content: either content or content_base64 is required');
+      throw ContentError.contentRequired();
     }
     if (input.content && input.content_base64) {
-      throw new Error('Invalid content: provide either content or content_base64, not both');
+      throw ContentError.bothContentProvided();
     }
-    if (input.content && (input.content === null || input.content === undefined || input.content === '')) {
-      throw new Error('Invalid content: content cannot be empty');
+    if (input.content !== undefined && (input.content === null || input.content === '')) {
+      throw ContentError.contentEmpty('content');
     }
-    if (input.content_base64 && (input.content_base64 === null || input.content_base64 === undefined || input.content_base64 === '')) {
-      throw new Error('Invalid content: content_base64 cannot be empty');
+    if (input.content_base64 !== undefined && (input.content_base64 === null || input.content_base64 === undefined || input.content_base64 === '')) {
+      throw ContentError.contentEmpty('content_base64');
+    }
+    
+    // Validate base64 format if provided
+    if (input.content_base64) {
+      if (typeof input.content_base64 !== 'string') {
+        throw new ContentError(
+          'content_base64 must be a string',
+          ErrorCode.CONTENT_INVALID,
+          {
+            suggestion: 'Ensure your base64 conversion returns a string',
+            context: { providedType: typeof input.content_base64 }
+          }
+        );
+      }
+      
+      // Basic base64 format validation
+      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+      if (!base64Regex.test(input.content_base64)) {
+        throw ContentError.invalidBase64();
+      }
     }
     
     // Validate optional fields - these will throw helpful errors for invalid values
@@ -76,67 +87,26 @@ export class EntriesResource {
       }
     }
 
-    // Handle content encoding - either use pre-encoded base64 or encode raw content
+    // Handle content encoding with proper error boundaries
     let contentBase64: string;
     
-    if (input.content_base64) {
-      // Use pre-encoded base64 content directly
-      contentBase64 = input.content_base64;
-    } else if (input.content) {
-      // Convert raw content to base64 (browser-compatible)
-      if (input.content instanceof Blob || input.content instanceof File) {
-        // Browser binary content (Blob/File)
-        const arrayBuffer = await input.content.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        if (typeof Buffer !== 'undefined' && Buffer.from) {
-          // Node.js environment
-          contentBase64 = Buffer.from(bytes).toString('base64');
-        } else {
-          // Browser environment - convert bytes to binary string then base64
-          let binaryString = '';
-          for (let i = 0; i < bytes.length; i++) {
-            binaryString += String.fromCharCode(bytes[i]);
-          }
-          contentBase64 = btoa(binaryString);
-        }
-      } else if (input.content instanceof ArrayBuffer) {
-        // Direct ArrayBuffer
-        const bytes = new Uint8Array(input.content);
-        if (typeof Buffer !== 'undefined' && Buffer.from) {
-          // Node.js environment
-          contentBase64 = Buffer.from(bytes).toString('base64');
-        } else {
-          // Browser environment - convert bytes to binary string then base64
-          let binaryString = '';
-          for (let i = 0; i < bytes.length; i++) {
-            binaryString += String.fromCharCode(bytes[i]);
-          }
-          contentBase64 = btoa(binaryString);
-        }
+    try {
+      if (input.content_base64) {
+        // Use pre-encoded base64 content directly
+        contentBase64 = input.content_base64;
+      } else if (input.content) {
+        // Convert raw content to base64 (browser-compatible)
+        contentBase64 = await this.encodeContentToBase64(input.content);
       } else {
-        // String, Buffer, or object content
-        let contentStr: string;
-        if (typeof input.content === 'object') {
-          contentStr = JSON.stringify(input.content);
-        } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(input.content)) {
-          // Node.js Buffer
-          contentStr = input.content.toString();
-        } else {
-          // String content
-          contentStr = input.content;
-        }
-
-        // Text-based base64 encoding
-        if (typeof Buffer !== 'undefined' && Buffer.from) {
-          // Node.js environment
-          contentBase64 = Buffer.from(contentStr).toString('base64');
-        } else {
-          // Browser environment
-          contentBase64 = btoa(unescape(encodeURIComponent(contentStr)));
-        }
+        // This should never happen due to validation above, but just in case
+        throw ContentError.contentRequired();
       }
-    } else {
-      throw new Error('Internal error: no content provided'); // Should never reach here due to validation above
+    } catch (error) {
+      // Wrap any encoding errors with helpful context
+      if (error instanceof ContentError) {
+        throw error; // Re-throw our own errors
+      }
+      throw ContentError.processingFailed('content encoding', error as Error);
     }
 
     // Build entry data using validated values
@@ -297,5 +267,68 @@ export class EntriesResource {
       yield response.data;
       pageToken = response.next_page_token;
     } while (pageToken);
+  }
+  
+  /**
+   * Encode content to base64 with proper error handling
+   * @private
+   */
+  private async encodeContentToBase64(content: string | Buffer | Blob | File | ArrayBuffer | object): Promise<string> {
+    try {
+      if (content instanceof Blob || content instanceof File) {
+        // Browser binary content (Blob/File)
+        const arrayBuffer = await content.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        if (typeof Buffer !== 'undefined' && Buffer.from) {
+          // Node.js environment
+          return Buffer.from(bytes).toString('base64');
+        } else {
+          // Browser environment - convert bytes to binary string then base64
+          let binaryString = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binaryString += String.fromCharCode(bytes[i]);
+          }
+          return btoa(binaryString);
+        }
+      } else if (content instanceof ArrayBuffer) {
+        // Direct ArrayBuffer
+        const bytes = new Uint8Array(content);
+        if (typeof Buffer !== 'undefined' && Buffer.from) {
+          // Node.js environment
+          return Buffer.from(bytes).toString('base64');
+        } else {
+          // Browser environment - convert bytes to binary string then base64
+          let binaryString = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binaryString += String.fromCharCode(bytes[i]);
+          }
+          return btoa(binaryString);
+        }
+      } else {
+        // String, Buffer, or object content
+        let contentStr: string;
+        if (typeof content === 'object') {
+          contentStr = JSON.stringify(content);
+        } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(content)) {
+          // Node.js Buffer
+          contentStr = content.toString();
+        } else {
+          // String content
+          contentStr = content as string;
+        }
+
+        // Text-based base64 encoding
+        if (typeof Buffer !== 'undefined' && Buffer.from) {
+          // Node.js environment
+          return Buffer.from(contentStr).toString('base64');
+        } else {
+          // Browser environment
+          return btoa(unescape(encodeURIComponent(contentStr)));
+        }
+      }
+    } catch (error) {
+      // This catches native errors from btoa(), Buffer operations, etc.
+      throw ContentError.processingFailed('base64 encoding', error as Error);
+    }
   }
 }

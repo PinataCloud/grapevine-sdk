@@ -30,5 +30,13 @@ export { EntriesResource } from './resources/entries.js';
 export { AuthManager } from './auth.js';
 export { PaymentManager } from './payments.js';
 
-// Export validation utilities for error handling
+// Export error classes for structured error handling
 export { ValidationError } from './validation.js';
+export { 
+  GrapevineError, 
+  ContentError, 
+  AuthError, 
+  ConfigError, 
+  ApiError,
+  ErrorCode 
+} from './errors.js';

@@ -15,6 +15,7 @@ import {
   validateOptionalStringArray,
   validateOptionalBoolean
 } from '../validation.js';
+import { ContentError, ConfigError, ErrorCode } from '../errors.js';
 
 export class FeedsResource {
   constructor(private client: GrapevineClient) {}
@@ -35,17 +36,71 @@ export class FeedsResource {
     // Handle image content validation - similar to entry content validation
     const imageOptionsCount = [input.image, input.image_base64, input.image_url].filter(Boolean).length;
     if (imageOptionsCount > 1) {
-      throw new Error('Invalid image: provide only one of image, image_base64, or image_url');
+      throw new ConfigError(
+        'Cannot provide multiple image fields',
+        ErrorCode.CONFIG_CONFLICTING,
+        {
+          suggestion: 'Choose only one: image (raw), image_base64 (pre-encoded), or image_url (legacy)',
+          example: `// ✅ Choose one option
+{
+  name: 'My Feed',
+  image: fileBlob  // Raw image - SDK will encode
+}
+// OR
+{
+  name: 'My Feed', 
+  image_base64: 'iVBORw0...'  // Pre-encoded base64
+}
+// OR
+{
+  name: 'My Feed',
+  image_url: 'https://example.com/image.jpg'  // Legacy URL
+}`,
+          context: {
+            providedFields: [
+              input.image && 'image',
+              input.image_base64 && 'image_base64', 
+              input.image_url && 'image_url'
+            ].filter(Boolean)
+          }
+        }
+      );
+    }
+    
+    // Validate base64 image format if provided
+    if (input.image_base64) {
+      if (typeof input.image_base64 !== 'string') {
+        throw new ContentError(
+          'image_base64 must be a string',
+          ErrorCode.CONTENT_INVALID,
+          {
+            suggestion: 'Ensure your base64 conversion returns a string',
+            context: { providedType: typeof input.image_base64 }
+          }
+        );
+      }
+      
+      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+      if (!base64Regex.test(input.image_base64)) {
+        throw ContentError.invalidBase64();
+      }
     }
     
     const image_url = validateOptionalURL('image_url', input.image_url);
     
-    // Handle image encoding if raw image content is provided
+    // Handle image encoding with proper error boundaries
     let imageBase64: string | undefined;
-    if (input.image_base64) {
-      imageBase64 = input.image_base64;
-    } else if (input.image) {
-      imageBase64 = await this.encodeImageToBase64(input.image);
+    try {
+      if (input.image_base64) {
+        imageBase64 = input.image_base64;
+      } else if (input.image) {
+        imageBase64 = await this.encodeImageToBase64(input.image);
+      }
+    } catch (error) {
+      if (error instanceof ContentError) {
+        throw error;
+      }
+      throw ContentError.processingFailed('image encoding', error as Error);
     }
     
     // Build validated payload (only include defined values)
@@ -144,17 +199,71 @@ export class FeedsResource {
     // Handle image content validation - similar to entry content validation
     const imageOptionsCount = [input.image, input.image_base64, input.image_url].filter(Boolean).length;
     if (imageOptionsCount > 1) {
-      throw new Error('Invalid image: provide only one of image, image_base64, or image_url');
+      throw new ConfigError(
+        'Cannot provide multiple image fields',
+        ErrorCode.CONFIG_CONFLICTING,
+        {
+          suggestion: 'Choose only one: image (raw), image_base64 (pre-encoded), or image_url (legacy)',
+          example: `// ✅ Choose one option
+{
+  name: 'My Feed',
+  image: fileBlob  // Raw image - SDK will encode
+}
+// OR
+{
+  name: 'My Feed', 
+  image_base64: 'iVBORw0...'  // Pre-encoded base64
+}
+// OR
+{
+  name: 'My Feed',
+  image_url: 'https://example.com/image.jpg'  // Legacy URL
+}`,
+          context: {
+            providedFields: [
+              input.image && 'image',
+              input.image_base64 && 'image_base64', 
+              input.image_url && 'image_url'
+            ].filter(Boolean)
+          }
+        }
+      );
+    }
+    
+    // Validate base64 image format if provided
+    if (input.image_base64) {
+      if (typeof input.image_base64 !== 'string') {
+        throw new ContentError(
+          'image_base64 must be a string',
+          ErrorCode.CONTENT_INVALID,
+          {
+            suggestion: 'Ensure your base64 conversion returns a string',
+            context: { providedType: typeof input.image_base64 }
+          }
+        );
+      }
+      
+      const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+      if (!base64Regex.test(input.image_base64)) {
+        throw ContentError.invalidBase64();
+      }
     }
     
     const image_url = validateOptionalURL('image_url', input.image_url);
     
-    // Handle image encoding if raw image content is provided
+    // Handle image encoding with proper error boundaries
     let imageBase64: string | undefined;
-    if (input.image_base64) {
-      imageBase64 = input.image_base64;
-    } else if (input.image) {
-      imageBase64 = await this.encodeImageToBase64(input.image);
+    try {
+      if (input.image_base64) {
+        imageBase64 = input.image_base64;
+      } else if (input.image) {
+        imageBase64 = await this.encodeImageToBase64(input.image);
+      }
+    } catch (error) {
+      if (error instanceof ContentError) {
+        throw error;
+      }
+      throw ContentError.processingFailed('image encoding', error as Error);
     }
     
     // Build validated payload (only include defined values)

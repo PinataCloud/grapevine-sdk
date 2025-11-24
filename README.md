@@ -451,28 +451,102 @@ try {
 
 ### Error Handling Best Practices
 
+The SDK provides structured error handling with specific error types and helpful suggestions:
+
 ```typescript
-import { ValidationError } from '@pinata/grapevine-sdk';
+import { 
+  ValidationError, 
+  ContentError, 
+  AuthError, 
+  ApiError, 
+  ErrorCode 
+} from '@pinata/grapevine-sdk';
 
 try {
-  const feed = await grapevine.feeds.create(feedData);
-  console.log('Feed created successfully:', feed.id);
+  const entry = await grapevine.entries.create('feed-id', {
+    content_base64: base64Data,
+    title: 'My Entry'
+  });
+  console.log('Entry created successfully:', entry.id);
 } catch (error) {
-  if (error instanceof ValidationError) {
-    // Client-side validation error - fix the input data
+  if (error instanceof ContentError) {
+    // Content validation or processing error
+    console.error('Content error:', error.message);
+    console.log('Suggestion:', error.suggestion);
+    
+    if (error.code === ErrorCode.CONTENT_EMPTY) {
+      // Handle empty content case
+      console.log('Content was empty or undefined');
+    } else if (error.code === ErrorCode.BASE64_INVALID) {
+      // Handle invalid base64 format
+      console.log('Base64 format is invalid');
+    }
+  } else if (error instanceof AuthError) {
+    // Authentication/wallet error
+    console.error('Auth error:', error.message);
+    
+    if (error.code === ErrorCode.AUTH_NO_WALLET) {
+      // Prompt user to connect wallet
+      console.log('Please connect your wallet first');
+    }
+  } else if (error instanceof ApiError) {
+    // API request failed
+    console.error(`API error (${error.status}):`, error.message);
+    
+    if (error.status === 402) {
+      console.log('Payment required for this operation');
+    } else if (error.status === 404) {
+      console.log('Resource not found - check your IDs');
+    }
+  } else if (error instanceof ValidationError) {
+    // Field validation error (from validation.ts)
     console.error('Validation error:', error.message);
-    // Show user-friendly error message in UI
-  } else if (error.message.includes('402')) {
-    // Payment required
-    console.error('Payment required for this operation');
-  } else if (error.message.includes('Invalid category_id')) {
-    // Server-side category validation (category doesn't exist)
-    console.error('Category no longer exists, please select a different category');
   } else {
-    // Other API or network errors
-    console.error('API error:', error.message);
+    // Unexpected error
+    console.error('Unexpected error:', error.message);
+  }
+  
+  // All SDK errors include helpful context
+  if (error.getDetailedMessage) {
+    console.log('Detailed help:');
+    console.log(error.getDetailedMessage());
   }
 }
+```
+
+#### Error Types
+
+- **`ContentError`**: Issues with content validation, base64 encoding, or processing
+- **`AuthError`**: Authentication, wallet, or private key issues  
+- **`ConfigError`**: Configuration conflicts or invalid settings
+- **`ApiError`**: HTTP request failures, server errors, payment required
+- **`ValidationError`**: Field validation errors (legacy from validation.ts)
+
+#### Common Content Error Solutions
+
+```typescript
+// ❌ Wrong - undefined base64 content
+try {
+  await grapevine.entries.create('feed-id', {
+    content_base64: undefined  // This will throw ContentError.CONTENT_EMPTY
+  });
+} catch (error) {
+  if (error instanceof ContentError && error.code === ErrorCode.CONTENT_EMPTY) {
+    console.log(error.suggestion); // "Ensure your base64 conversion succeeded..."
+    console.log(error.example);    // Shows code example
+  }
+}
+
+// ✅ Correct - check conversion result
+const base64Data = await convertFileToBase64(file);
+if (!base64Data) {
+  throw new Error('Failed to convert file to base64');
+}
+
+await grapevine.entries.create('feed-id', {
+  content_base64: base64Data,
+  title: 'My File'
+});
 ```
 
 ### Validation Rules Reference

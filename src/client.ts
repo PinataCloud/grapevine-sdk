@@ -4,6 +4,7 @@ import { FeedsResource } from './resources/feeds.js';
 import { EntriesResource } from './resources/entries.js';
 import type { GrapevineConfig, Category } from './types.js';
 import type { WalletAdapter } from './adapters/wallet-adapter.js';
+import { AuthError, ConfigError, ApiError } from './errors.js';
 
 interface RequestOptions {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -39,13 +40,13 @@ export class GrapevineClient {
 
     // Initialize auth if private key or wallet adapter is provided
     if (config.privateKey && config.walletAdapter) {
-      throw new Error('Cannot provide both privateKey and walletAdapter');
+      throw ConfigError.conflictingConfig('privateKey', 'walletAdapter');
     }
     
     // Validate private key format if provided
     if (config.privateKey) {
       if (typeof config.privateKey !== 'string' || !config.privateKey.startsWith('0x') || config.privateKey.length !== 66) {
-        throw new Error('Invalid private key format. Must be 66 characters starting with 0x');
+        throw AuthError.invalidPrivateKey(config.privateKey);
       }
       this.initializeAuth(config.privateKey);
     } else if (config.walletAdapter) {
@@ -71,7 +72,7 @@ export class GrapevineClient {
    */
   initializeAuth(privateKey: string): void {
     if (!privateKey.startsWith('0x')) {
-      throw new Error('Private key must start with 0x');
+      throw AuthError.invalidPrivateKey(privateKey);
     }
     
     this.authManager = new AuthManager(privateKey, this.apiUrl, this.isTestnet);
@@ -145,7 +146,7 @@ export class GrapevineClient {
     // Add auth headers if required
     if (options.requiresAuth) {
       if (!this.authManager) {
-        throw new Error('Authentication required but no wallet configured. Use setWalletClient() to configure a wallet first.');
+        throw AuthError.noWallet();
       }
       authHeaders = await this.authManager.getAuthHeaders();
       Object.assign(headers, authHeaders);
@@ -187,7 +188,7 @@ export class GrapevineClient {
     // Check for errors
     if (!response.ok && response.status !== 204) {
       const errorText = await response.text();
-      throw new Error(`API request failed (${response.status}): ${errorText}`);
+      throw ApiError.requestFailed(response.status, errorText, url);
     }
 
     return response;
@@ -213,7 +214,7 @@ export class GrapevineClient {
    */
   getWalletAddress(): string {
     if (!this.authManager) {
-      throw new Error('No wallet configured. Use setWalletClient() to configure a wallet first.');
+      throw AuthError.noWallet();
     }
     return this.authManager.walletAddress;
   }
