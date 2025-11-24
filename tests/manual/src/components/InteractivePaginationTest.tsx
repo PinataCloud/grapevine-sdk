@@ -1,8 +1,7 @@
-import { useState, useMemo } from 'react';
-import { useAccount, useWalletClient } from 'wagmi';
-import { GrapevineClient } from '@grapevine/sdk';
+import { useState } from 'react';
+import { useWalletClient } from 'wagmi';
 import { useGrapevine } from '@grapevine/sdk/react';
-import type { Feed, Entry, PaginatedResponse } from '@grapevine/sdk';
+import type { Feed, Entry } from '@grapevine/sdk';
 
 interface PaginationState {
   currentPage: number;
@@ -14,7 +13,6 @@ interface PaginationState {
 }
 
 export default function InteractivePaginationTest() {
-  const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
   const [network, setNetwork] = useState<'testnet' | 'mainnet'>('testnet');
   const [loading, setLoading] = useState(false);
@@ -42,8 +40,7 @@ export default function InteractivePaginationTest() {
   });
 
   const grapevine = useGrapevine({
-    walletClient,
-    address,
+    walletClient: walletClient as any,
     network,
     debug: true
   });

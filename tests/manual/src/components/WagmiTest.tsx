@@ -15,7 +15,7 @@ export default function WagmiTest() {
   useEffect(() => {
     if (walletClient) {
       try {
-        const adapter = new WagmiAdapter(walletClient);
+        const adapter = new WagmiAdapter(walletClient as any);
         const client = new GrapevineClient({
           walletAdapter: adapter,
           network,

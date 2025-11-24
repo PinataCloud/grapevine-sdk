@@ -231,24 +231,42 @@ await grapevine.feeds.delete('feed-id');
 
 #### Create Entry
 ```typescript
-// Simple text entry
+// Simple text entry (minimal required fields)
 const entry = await grapevine.entries.create('feed-id', {
   content: 'Text content',
-  title: 'Entry Title',
-  is_free: true
+  // title is optional - omit if not needed
+  // is_free defaults to true
 });
 
-// JSON data (auto-detected)
+// Entry with optional fields (proper way)
+const entryWithDetails = await grapevine.entries.create('feed-id', {
+  content: 'Text content',
+  title: 'Entry Title',        // Optional string
+  description: 'Description',  // Optional string  
+  tags: ['news', 'update'],    // Optional array
+  is_free: true               // Optional boolean
+});
+
+// ❌ Don't do this - empty strings for optional fields
+// const badEntry = await grapevine.entries.create('feed-id', {
+//   content: 'Text content',
+//   title: '',           // ValidationError - use undefined instead
+//   description: '',     // ValidationError - use undefined instead
+//   tags: ['valid', '']  // ValidationError - empty strings in arrays not allowed
+// });
+
+// JSON data (auto-detects MIME type)
 const jsonEntry = await grapevine.entries.create('feed-id', {
-  content: { data: 'value' },  // Automatically encoded
+  content: { data: 'value' },  // Automatically encoded as JSON
   title: 'JSON Entry'
 });
 
-// Paid entry
+// Paid entry with expiration
 const paidEntry = await grapevine.entries.create('feed-id', {
   content: 'Premium content',
   title: 'Premium Article',
   is_free: false,
+  expires_at: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60), // 7 days from now
   price: {
     amount: '1000000',  // 1 USDC
     currency: 'USDC'
@@ -349,6 +367,196 @@ if (businessCategory) {
 - When provided, must be a valid UUID from `/v1/categories` endpoint  
 - Empty strings or invalid UUIDs will be rejected with validation error
 - Non-existent category UUIDs will be rejected
+
+## Validation & Error Handling
+
+The SDK includes comprehensive client-side validation to provide helpful error messages before API calls are made. This helps developers catch issues early with clear guidance on how to fix them.
+
+### Validation Principles
+
+1. **Optional fields can be omitted or `undefined`** - this is the recommended approach
+2. **Empty strings are rejected** - use `undefined` instead of empty strings for optional fields
+3. **Invalid formats are caught early** - UUIDs, URLs, and other formats are validated client-side
+4. **Helpful error messages** - validation errors include specific guidance on how to fix the issue
+
+### Common Validation Scenarios
+
+```typescript
+// ✅ Correct - omit optional fields or use undefined
+await grapevine.feeds.create({
+  name: 'My Feed',
+  // category_id not specified - perfectly fine
+});
+
+await grapevine.feeds.create({
+  name: 'My Feed',
+  category_id: undefined,  // Also fine
+  description: undefined   // Also fine
+});
+
+// ❌ Incorrect - empty strings for optional fields
+await grapevine.feeds.create({
+  name: 'My Feed',
+  category_id: '',        // Will throw ValidationError
+  description: '',        // Will throw ValidationError  
+  image_url: ''           // Will throw ValidationError
+});
+
+// ✅ Correct - proper values when provided
+const categories = await grapevine.getCategories();
+await grapevine.feeds.create({
+  name: 'My Feed',
+  category_id: categories[0].id,    // Valid UUID
+  description: 'A great feed',      // Non-empty string
+  image_url: 'https://example.com/image.jpg'  // Valid URL with protocol
+});
+```
+
+### Validation Error Examples
+
+```typescript
+try {
+  await grapevine.feeds.create({
+    name: 'My Feed',
+    category_id: '',  // Empty string
+  });
+} catch (error) {
+  console.log(error.message);
+  // "Invalid category_id: expected valid UUID or omit the field entirely, got "". 
+  //  Pass undefined or omit the field instead of empty string. 
+  //  Get valid category IDs from the appropriate API endpoint."
+}
+
+try {
+  await grapevine.feeds.create({
+    name: 'My Feed', 
+    image_url: 'not-a-url',  // Invalid URL
+  });
+} catch (error) {
+  console.log(error.message);
+  // "Invalid image_url: expected valid URL starting with http:// or https://, got "not-a-url". 
+  //  Ensure the URL is properly formatted with protocol"
+}
+
+try {
+  await grapevine.feeds.create({
+    name: 'My Feed',
+    tags: ['valid', '', 'also-valid'],  // Empty string in array
+  });
+} catch (error) {
+  console.log(error.message);
+  // "Invalid tags[1]: expected non-empty string, got "". Array items cannot be empty strings"
+}
+```
+
+### Error Handling Best Practices
+
+```typescript
+import { ValidationError } from '@pinata/grapevine-sdk';
+
+try {
+  const feed = await grapevine.feeds.create(feedData);
+  console.log('Feed created successfully:', feed.id);
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // Client-side validation error - fix the input data
+    console.error('Validation error:', error.message);
+    // Show user-friendly error message in UI
+  } else if (error.message.includes('402')) {
+    // Payment required
+    console.error('Payment required for this operation');
+  } else if (error.message.includes('Invalid category_id')) {
+    // Server-side category validation (category doesn't exist)
+    console.error('Category no longer exists, please select a different category');
+  } else {
+    // Other API or network errors
+    console.error('API error:', error.message);
+  }
+}
+```
+
+### Validation Rules Reference
+
+| Field Type | Validation Rules | Example Error |
+|------------|------------------|---------------|
+| **Optional UUID** | Must be valid UUID format when provided | `Invalid category_id: expected valid UUID format` |
+| **Optional String** | Cannot be empty string when provided | `Invalid description: Pass undefined instead of empty string` |
+| **Optional URL** | Must start with http:// or https:// when provided | `Invalid image_url: expected valid URL starting with http://` |
+| **Optional Array** | Can be empty `[]` but cannot contain empty string elements | `Invalid tags[0]: Array items cannot be empty strings` |
+| **Optional Boolean** | Must be `true`, `false`, or `undefined` | `Invalid is_active: expected boolean (true or false)` |
+| **Optional Timestamp** | Must be positive Unix timestamp in seconds | `Invalid expires_at: expected Unix timestamp in seconds` |
+
+### Working with Forms and User Input
+
+When building forms, it's common to have empty strings from user input. Here's how to handle them properly:
+
+```typescript
+// ❌ Direct form values can cause validation errors
+const formData = new FormData(formElement);
+const feedData = {
+  name: formData.get('name'),
+  description: formData.get('description'), // Might be empty string ""
+  category_id: formData.get('category'),    // Might be empty string ""
+};
+
+// ❌ This will throw ValidationError if description or category_id are empty strings
+// await grapevine.feeds.create(feedData);
+
+// ✅ Convert empty strings to undefined
+function sanitizeOptionalField(value: string | null): string | undefined {
+  if (!value || value.trim() === '') return undefined;
+  return value.trim();
+}
+
+const cleanFeedData = {
+  name: formData.get('name') as string, // Required field
+  description: sanitizeOptionalField(formData.get('description') as string),
+  category_id: sanitizeOptionalField(formData.get('category') as string),
+};
+
+await grapevine.feeds.create(cleanFeedData); // ✅ Works correctly
+```
+
+### Dynamic Field Updates
+
+When updating feeds with partial data:
+
+```typescript
+// ✅ Only update fields that have values
+const updateData: UpdateFeedInput = {};
+
+if (newName && newName.trim()) updateData.name = newName.trim();
+if (newDescription && newDescription.trim()) updateData.description = newDescription.trim(); 
+if (selectedCategoryId) updateData.category_id = selectedCategoryId;
+if (newTags && newTags.length > 0) updateData.tags = newTags.filter(tag => tag.trim());
+
+// Only make API call if there's something to update
+if (Object.keys(updateData).length > 0) {
+  await grapevine.feeds.update(feedId, updateData);
+}
+```
+
+### Migration from Older SDK Versions
+
+If you're upgrading from an older SDK version that didn't have validation:
+
+```typescript
+// Old code that might have worked before:
+// const feed = await grapevine.feeds.create({
+//   name: 'My Feed',
+//   description: '',      // This now throws ValidationError
+//   category_id: '',      // This now throws ValidationError
+//   tags: ['', 'valid']   // This now throws ValidationError
+// });
+
+// New code with proper validation:
+const feed = await grapevine.feeds.create({
+  name: 'My Feed',
+  // description: omitted (or use undefined)
+  // category_id: omitted (or use undefined)  
+  tags: ['valid']  // Empty strings filtered out
+});
+```
 
 ## React Integration
 
@@ -551,6 +759,9 @@ import type {
   PaginatedResponse,
   GrapevineConfig
 } from '@pinata/grapevine-sdk';
+
+// Import validation error for error handling
+import { ValidationError } from '@pinata/grapevine-sdk';
 
 // React types
 import type {

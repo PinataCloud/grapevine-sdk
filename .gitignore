@@ -74,3 +74,4 @@ playwright/.cache/
 # Manual test app
 tests/manual/dist/
 tests/manual/node_modules/
+tests/manual/public/test-files/

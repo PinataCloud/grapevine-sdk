@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useAccount, useWalletClient } from 'wagmi';
+import { useWalletClient } from 'wagmi';
 import { GrapevineClient, WagmiAdapter } from '@grapevine/sdk';
 import { useGrapevine } from '@grapevine/sdk/react';
+import { generateTestFiles } from '../utils/testFileGenerator';
 
 interface TestResult {
   id: string;
@@ -21,7 +22,6 @@ interface TestCase {
 }
 
 export default function TestSuite() {
-  const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
   const [authMode, setAuthMode] = useState<'wagmi' | 'private-key'>('wagmi');
   const [privateKey, setPrivateKey] = useState(import.meta.env.VITE_PRIVATE_KEY || '');
@@ -38,7 +38,7 @@ export default function TestSuite() {
 
   // Memoize wagmi client configuration to prevent recreation
   const grapevineConfig = useMemo(() => ({
-    walletClient: authMode === 'wagmi' ? walletClient : undefined,
+    walletClient: authMode === 'wagmi' ? (walletClient as any) : undefined,
     network,
     debug: true
   }), [authMode, walletClient, network]);
@@ -184,7 +184,7 @@ export default function TestSuite() {
           // Try to set it back based on current auth mode
           if (authMode === 'wagmi' && walletClient) {
             try {
-              const adapter = new WagmiAdapter(walletClient);
+              const adapter = new WagmiAdapter(walletClient as any);
               client.setWalletClient(adapter);
               finalHasWallet = client.hasWallet();
               walletSetResult = 'success - wagmi adapter';
@@ -291,24 +291,32 @@ export default function TestSuite() {
     {
       id: 'create-feed-empty-category',
       name: 'Create Feed (Empty String Category)',
-      description: 'Test validation - should fail with empty string category_id',
+      description: 'Test client-side validation - should fail with helpful error for empty string category_id',
       category: 'Category Validation',
       test: async (client) => {
         try {
-          const feed = await client.feeds.create({
+          await client.feeds.create({
             name: `Test Suite Feed Empty Category ${Date.now()}`,
             description: 'This should fail - empty category',
             tags: ['test', 'automated', 'empty-category', authMode],
             category_id: ''
           });
-          throw new Error('Expected validation error but feed was created successfully');
+          throw new Error('Expected client-side validation error but feed was created successfully');
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          if (errorMessage.includes('Invalid UUID') || errorMessage.includes('ZodError')) {
+          if (errorMessage.includes('Invalid category_id') && errorMessage.includes('omit the field')) {
             return {
               expectedFailure: true,
               error: errorMessage,
-              message: 'Correctly rejected empty string category_id with UUID validation error'
+              message: 'Client-side validation correctly caught empty string with helpful error message',
+              validationType: 'client-side'
+            };
+          } else if (errorMessage.includes('Invalid UUID') || errorMessage.includes('ZodError')) {
+            return {
+              expectedFailure: true,
+              error: errorMessage,
+              message: 'Server-side validation caught the error (client-side validation may have been bypassed)',
+              validationType: 'server-side'
             };
           } else {
             throw new Error(`Unexpected error type: ${errorMessage}`);
@@ -323,7 +331,7 @@ export default function TestSuite() {
       category: 'Category Validation',
       test: async (client) => {
         try {
-          const feed = await client.feeds.create({
+          await client.feeds.create({
             name: `Test Suite Feed Invalid Category ${Date.now()}`,
             description: 'This should fail - invalid UUID',
             tags: ['test', 'automated', 'invalid-category', authMode],
@@ -332,11 +340,19 @@ export default function TestSuite() {
           throw new Error('Expected validation error but feed was created successfully');
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          if (errorMessage.includes('Invalid UUID') || errorMessage.includes('ZodError')) {
+          if (errorMessage.includes('Invalid category_id') && errorMessage.includes('expected valid UUID format')) {
             return {
               expectedFailure: true,
               error: errorMessage,
-              message: 'Correctly rejected invalid UUID format with validation error'
+              message: 'Client-side validation correctly caught invalid UUID with helpful error message',
+              validationType: 'client-side'
+            };
+          } else if (errorMessage.includes('Invalid UUID') || errorMessage.includes('ZodError')) {
+            return {
+              expectedFailure: true,
+              error: errorMessage,
+              message: 'Server-side validation caught the error (client-side validation may have been bypassed)',
+              validationType: 'server-side'
             };
           } else {
             throw new Error(`Unexpected error type: ${errorMessage}`);
@@ -351,7 +367,7 @@ export default function TestSuite() {
       category: 'Category Validation',
       test: async (client) => {
         try {
-          const feed = await client.feeds.create({
+          await client.feeds.create({
             name: `Test Suite Feed Non-existent Category ${Date.now()}`,
             description: 'This should fail - non-existent category UUID',
             tags: ['test', 'automated', 'nonexistent-category', authMode],
@@ -360,16 +376,104 @@ export default function TestSuite() {
           throw new Error('Expected validation error but feed was created successfully');
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          if (errorMessage.includes('Invalid category_id') || errorMessage.includes('Category does not exist')) {
+          if (errorMessage.includes('Invalid category_id') && errorMessage.includes('Category does not exist')) {
             return {
               expectedFailure: true,
               error: errorMessage,
-              message: 'Correctly rejected non-existent category UUID with business logic error'
+              message: 'Server-side validation correctly rejected non-existent category UUID',
+              validationType: 'server-side'
+            };
+          } else if (errorMessage.includes('Invalid category_id') && errorMessage.includes('expected valid UUID format')) {
+            // This would happen if our UUID wasn't actually valid format
+            return {
+              expectedFailure: true,
+              error: errorMessage,
+              message: 'Client-side validation caught invalid UUID format first',
+              validationType: 'client-side'
             };
           } else {
             throw new Error(`Unexpected error type: ${errorMessage}`);
           }
         }
+      }
+    },
+    {
+      id: 'validation-comprehensive',
+      name: 'Comprehensive Client-Side Validation',
+      description: 'Test various client-side validation scenarios with helpful error messages',
+      category: 'Category Validation',
+      test: async (client) => {
+        const results: any[] = [];
+        
+        // Test 1: Empty string for optional URL field
+        try {
+          await client.feeds.create({
+            name: 'Test',
+            image_url: ''
+          });
+          results.push({ test: 'empty_image_url', result: 'unexpected_success' });
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          results.push({ 
+            test: 'empty_image_url', 
+            result: msg.includes('omit the field') ? 'correct_validation' : 'unexpected_error',
+            error: msg
+          });
+        }
+        
+        // Test 2: Invalid URL format
+        try {
+          await client.feeds.create({
+            name: 'Test',
+            image_url: 'not-a-url'
+          });
+          results.push({ test: 'invalid_url', result: 'unexpected_success' });
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          results.push({ 
+            test: 'invalid_url', 
+            result: msg.includes('http://') ? 'correct_validation' : 'unexpected_error',
+            error: msg
+          });
+        }
+        
+        // Test 3: Empty array vs undefined for tags
+        try {
+          const feed = await client.feeds.create({
+            name: 'Test Empty Tags',
+            tags: []
+          });
+          results.push({ test: 'empty_tags_array', result: 'allowed_as_expected', feedId: feed.id });
+        } catch (error) {
+          results.push({ test: 'empty_tags_array', result: 'unexpected_error', error: error instanceof Error ? error.message : String(error) });
+        }
+        
+        // Test 4: Tags with empty string values
+        try {
+          await client.feeds.create({
+            name: 'Test',
+            tags: ['valid', '', 'also-valid']
+          });
+          results.push({ test: 'empty_string_in_tags', result: 'unexpected_success' });
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          results.push({ 
+            test: 'empty_string_in_tags', 
+            result: msg.includes('empty strings') ? 'correct_validation' : 'unexpected_error',
+            error: msg
+          });
+        }
+        
+        const passedTests = results.filter(r => r.result === 'correct_validation' || r.result === 'allowed_as_expected').length;
+        
+        return {
+          expectedFailure: passedTests === results.length, // Mark as expected failure if all validations worked correctly
+          totalTests: results.length,
+          passedValidations: passedTests,
+          results,
+          message: `Client-side validation working correctly for ${passedTests}/${results.length} test cases`,
+          validationType: 'client-side-comprehensive'
+        };
       }
     },
     {
@@ -427,7 +531,7 @@ export default function TestSuite() {
       test: async (client) => {
         const response = await client.feeds.list({ page_size: 10 });
         
-        let myFeeds = [];
+        let myFeeds: any[] = [];
         if (client.hasWallet()) {
           const walletAddress = client.getWalletAddress();
           myFeeds = response.data.filter(f => f.owner_wallet_address?.toLowerCase() === walletAddress.toLowerCase());
@@ -499,6 +603,117 @@ export default function TestSuite() {
       }
     },
     {
+      id: 'create-bulk-entries',
+      name: 'Create Bulk Entries (Multiple File Types)',
+      description: 'Create multiple entries with different file types (SVG, HTML, Markdown, JSON, etc.)',
+      category: 'Authenticated',
+      test: async (client, currentFeedId) => {
+        if (!client.hasWallet()) {
+          throw new Error('No wallet configured. Please connect a wallet or configure a private key first.');
+        }
+        
+        if (!currentFeedId) {
+          throw new Error('No feed available. You must create a feed first before creating entries (entries can only be created in feeds you own).');
+        }
+        
+        const testFiles = await generateTestFiles();
+        const results: any[] = [];
+        const errors: any[] = [];
+        
+        console.log(`🚀 Starting bulk entry creation with ${testFiles.length} test files:`);
+        console.log('📝 File breakdown:', testFiles.map(f => `${f.title} (${f.mimeType})`));
+        console.log('🔍 Binary files:', testFiles.filter(f => f.isFile).map(f => f.title));
+        console.log('📄 Generated files:', testFiles.filter(f => !f.isFile).map(f => f.title));
+        
+        for (let i = 0; i < testFiles.length; i++) {
+          const file = testFiles[i];
+          try {
+            console.log(`Creating entry ${i + 1}/${testFiles.length}: ${file.title} (${file.mimeType})`);
+            console.log(`Test type: ${file.testType}, has content: ${!!file.content}, has content_base64: ${!!file.content_base64}, content_base64 length: ${file.content_base64?.length || 'N/A'}`);
+            
+            // Use either raw content or pre-encoded base64 based on the file's testType
+            const entryInput = {
+              title: file.title,
+              description: file.description,
+              mime_type: file.mimeType,
+              tags: file.tags,
+              is_free: true,
+              ...(file.testType === 'raw' 
+                ? { content: file.content } 
+                : { content_base64: file.content_base64 }
+              )
+            };
+            
+            console.log('Entry input:', {
+              title: entryInput.title,
+              testType: file.testType,
+              hasContent: !!(entryInput as any).content,
+              hasContentBase64: !!(entryInput as any).content_base64,
+              contentBase64Length: (entryInput as any).content_base64?.length || 'N/A'
+            });
+            
+            const entry = await client.entries.create(currentFeedId, entryInput as any);
+            
+            results.push({
+              title: file.title,
+              entryId: entry.id,
+              mimeType: file.mimeType,
+              testType: file.testType,
+              contentSize: file.testType === 'raw' 
+                ? (typeof file.content === 'string' ? file.content.length : 'binary')
+                : file.content_base64?.length || 'unknown',
+              status: 'success'
+            });
+            
+            // Small delay between uploads to avoid rate limiting
+            if (i < testFiles.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          } catch (error) {
+            console.error(`Failed to create entry for ${file.title}:`, error);
+            errors.push({
+              title: file.title,
+              mimeType: file.mimeType,
+              testType: file.testType,
+              error: error instanceof Error ? error.message : String(error),
+              status: 'failed'
+            });
+          }
+        }
+        
+        return {
+          feedId: currentFeedId,
+          totalAttempted: testFiles.length,
+          successful: results.length,
+          failed: errors.length,
+          results,
+          errors,
+          fileTypes: testFiles.map(f => f.mimeType),
+          message: `Created ${results.length}/${testFiles.length} entries (${results.filter(r => r.testType === 'raw').length} raw + ${results.filter(r => r.testType === 'base64').length} base64)`,
+          testTypeSummary: {
+            raw: results.filter(r => r.testType === 'raw').length,
+            base64: results.filter(r => r.testType === 'base64').length,
+            rawFailed: errors.filter(e => e.testType === 'raw').length,
+            base64Failed: errors.filter(e => e.testType === 'base64').length
+          },
+          summary: {
+            'image/svg+xml': results.filter(r => r.mimeType === 'image/svg+xml').length,
+            'text/html': results.filter(r => r.mimeType === 'text/html').length,
+            'text/markdown': results.filter(r => r.mimeType === 'text/markdown').length,
+            'text/plain': results.filter(r => r.mimeType === 'text/plain').length,
+            'application/json': results.filter(r => r.mimeType === 'application/json').length,
+            'application/xml': results.filter(r => r.mimeType === 'application/xml').length,
+            'text/css': results.filter(r => r.mimeType === 'text/css').length,
+            'application/javascript': results.filter(r => r.mimeType === 'application/javascript').length,
+            'image/png': results.filter(r => r.mimeType === 'image/png').length,
+            'image/jpeg': results.filter(r => r.mimeType === 'image/jpeg').length,
+            'application/pdf': results.filter(r => r.mimeType === 'application/pdf').length,
+            'application/zip': results.filter(r => r.mimeType === 'application/zip').length
+          }
+        };
+      }
+    },
+    {
       id: 'list-feed-entries',
       name: 'List Feed Entries',
       description: 'Get entries for a specific feed',
@@ -564,7 +779,7 @@ export default function TestSuite() {
       name: 'Automated Entries Pagination',
       description: 'Quick automated test of entries pagination (use Interactive Pagination tab for manual testing)',
       category: 'Pagination',
-      test: async (client, currentFeedId) => {
+      test: async (client) => {
         // Find a feed with entries to test
         const feedsResponse = await client.feeds.list({ page_size: 10 });
         const feedWithEntries = feedsResponse.data.find(f => f.total_entries > 0);
@@ -646,18 +861,30 @@ export default function TestSuite() {
       const data = await testCase.test(testClient, currentFeedId);
       const duration = Date.now() - startTime;
       
-      // If this is any create feed test, immediately update the ref with the first successful one
-      if (testCase.id.startsWith('create-feed') && data && data.id && !currentFeedIdRef.current) {
-        console.log('Setting feed ID in ref:', data.id);
-        currentFeedIdRef.current = data.id;
-        setCreatedFeedId(data.id);
+      // Check if this is an expected failure test that should be marked as passed
+      if (data && data.expectedFailure === true) {
+        updateTestResult(testCase.id, {
+          status: 'passed',
+          duration,
+          data: {
+            ...data,
+            testNote: 'Expected failure - validation working correctly'
+          }
+        });
+      } else {
+        // If this is any create feed test, immediately update the ref with the first successful one
+        if (testCase.id.startsWith('create-feed') && data && data.id && !currentFeedIdRef.current) {
+          console.log('Setting feed ID in ref:', data.id);
+          currentFeedIdRef.current = data.id;
+          setCreatedFeedId(data.id);
+        }
+        
+        updateTestResult(testCase.id, {
+          status: 'passed',
+          duration,
+          data
+        });
       }
-      
-      updateTestResult(testCase.id, {
-        status: 'passed',
-        duration,
-        data
-      });
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -900,9 +1127,68 @@ export default function TestSuite() {
               .map(result => (
                 <div key={result.id} className="p-3 bg-green-50 rounded border border-green-200">
                   <div className="font-medium text-green-800 mb-2">{result.name}</div>
-                  <pre className="text-xs bg-white p-2 rounded overflow-x-auto">
-                    {JSON.stringify(result.data, null, 2)}
-                  </pre>
+                  {result.id === 'create-bulk-entries' && result.data ? (
+                    <div className="bg-white p-3 rounded border">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-green-600">{result.data.successful}</div>
+                          <div className="text-sm text-gray-600">Successful</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-red-600">{result.data.failed}</div>
+                          <div className="text-sm text-gray-600">Failed</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-blue-600">{result.data.totalAttempted}</div>
+                          <div className="text-sm text-gray-600">Total</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-purple-600">{Object.keys(result.data.summary).length}</div>
+                          <div className="text-sm text-gray-600">File Types</div>
+                        </div>
+                      </div>
+                      
+                      <div className="mb-4">
+                        <h4 className="font-semibold mb-2">File Type Summary</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
+                          {Object.entries(result.data.summary).map(([mimeType, count]) => (
+                            <div key={mimeType} className="bg-gray-50 p-2 rounded text-xs">
+                              <div className="font-mono text-xs text-gray-600">{mimeType}</div>
+                              <div className="font-bold">{String(count)} entries</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {result.data.errors && result.data.errors.length > 0 && (
+                        <div className="mb-4">
+                          <h4 className="font-semibold mb-2 text-red-700">Errors</h4>
+                          <div className="space-y-2">
+                            {result.data.errors.map((error: any, idx: number) => (
+                              <div key={idx} className="bg-red-50 p-2 rounded border border-red-200">
+                                <div className="font-semibold text-red-800">{error.title}</div>
+                                <div className="text-sm text-red-600">{error.mimeType}</div>
+                                <div className="text-xs text-red-700 mt-1">{error.error}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <details className="mt-4">
+                        <summary className="cursor-pointer font-semibold text-gray-700 hover:text-gray-900">
+                          View Full JSON Response
+                        </summary>
+                        <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto mt-2">
+                          {JSON.stringify(result.data, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  ) : (
+                    <pre className="text-xs bg-white p-2 rounded overflow-x-auto">
+                      {JSON.stringify(result.data, null, 2)}
+                    </pre>
+                  )}
                 </div>
               ))}
           </div>

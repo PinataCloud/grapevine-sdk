@@ -7,6 +7,13 @@ import type {
   ApiPaginatedResponse
 } from '../types.js';
 import type { GrapevineClient } from '../client.js';
+import { 
+  validateRequiredString,
+  validateOptionalString,
+  validateOptionalStringArray,
+  validateOptionalTimestamp,
+  validateOptionalBoolean
+} from '../validation.js';
 
 export class EntriesResource {
   constructor(private client: GrapevineClient) {}
@@ -16,8 +23,42 @@ export class EntriesResource {
    * Automatically handles authentication, payment, and content encoding
    */
   async create(feedId: string, input: CreateEntryInput): Promise<Entry> {
+    // Validate required fields
+    validateRequiredString('feedId', feedId);
+    
+    // Debug logging
+    console.log('Entry create validation:', {
+      hasContent: !!input.content,
+      contentType: typeof input.content,
+      contentValue: input.content,
+      hasContentBase64: !!input.content_base64,
+      contentBase64Type: typeof input.content_base64,
+      contentBase64Length: input.content_base64?.length || 'N/A'
+    });
+    
+    // Validate that either content or content_base64 is provided
+    if (!input.content && !input.content_base64) {
+      throw new Error('Invalid content: either content or content_base64 is required');
+    }
+    if (input.content && input.content_base64) {
+      throw new Error('Invalid content: provide either content or content_base64, not both');
+    }
+    if (input.content && (input.content === null || input.content === undefined || input.content === '')) {
+      throw new Error('Invalid content: content cannot be empty');
+    }
+    if (input.content_base64 && (input.content_base64 === null || input.content_base64 === undefined || input.content_base64 === '')) {
+      throw new Error('Invalid content: content_base64 cannot be empty');
+    }
+    
+    // Validate optional fields - these will throw helpful errors for invalid values
+    const title = validateOptionalString('title', input.title);
+    const description = validateOptionalString('description', input.description);
+    const mime_type = validateOptionalString('mime_type', input.mime_type);
+    const tags = validateOptionalStringArray('tags', input.tags);
+    const expires_at = validateOptionalTimestamp('expires_at', input.expires_at);
+    const is_free = validateOptionalBoolean('is_free', input.is_free);
     // Auto-detect MIME type if not provided
-    let mimeType = input.mime_type;
+    let mimeType = mime_type;
     if (!mimeType) {
       if (typeof input.content === 'object') {
         mimeType = 'application/json';
@@ -35,43 +76,84 @@ export class EntriesResource {
       }
     }
 
-    // Convert content to base64 (browser-compatible)
-    let contentStr: string;
-    if (typeof input.content === 'object') {
-      contentStr = JSON.stringify(input.content);
-    } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(input.content)) {
-      // Node.js environment
-      contentStr = input.content.toString();
-    } else {
-      contentStr = input.content;
-    }
-
-    // Browser-compatible base64 encoding
+    // Handle content encoding - either use pre-encoded base64 or encode raw content
     let contentBase64: string;
-    if (typeof Buffer !== 'undefined' && Buffer.from) {
-      // Node.js environment
-      contentBase64 = Buffer.from(contentStr).toString('base64');
+    
+    if (input.content_base64) {
+      // Use pre-encoded base64 content directly
+      contentBase64 = input.content_base64;
+    } else if (input.content) {
+      // Convert raw content to base64 (browser-compatible)
+      if (input.content instanceof Blob || input.content instanceof File) {
+        // Browser binary content (Blob/File)
+        const arrayBuffer = await input.content.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        if (typeof Buffer !== 'undefined' && Buffer.from) {
+          // Node.js environment
+          contentBase64 = Buffer.from(bytes).toString('base64');
+        } else {
+          // Browser environment - convert bytes to binary string then base64
+          let binaryString = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binaryString += String.fromCharCode(bytes[i]);
+          }
+          contentBase64 = btoa(binaryString);
+        }
+      } else if (input.content instanceof ArrayBuffer) {
+        // Direct ArrayBuffer
+        const bytes = new Uint8Array(input.content);
+        if (typeof Buffer !== 'undefined' && Buffer.from) {
+          // Node.js environment
+          contentBase64 = Buffer.from(bytes).toString('base64');
+        } else {
+          // Browser environment - convert bytes to binary string then base64
+          let binaryString = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binaryString += String.fromCharCode(bytes[i]);
+          }
+          contentBase64 = btoa(binaryString);
+        }
+      } else {
+        // String, Buffer, or object content
+        let contentStr: string;
+        if (typeof input.content === 'object') {
+          contentStr = JSON.stringify(input.content);
+        } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(input.content)) {
+          // Node.js Buffer
+          contentStr = input.content.toString();
+        } else {
+          // String content
+          contentStr = input.content;
+        }
+
+        // Text-based base64 encoding
+        if (typeof Buffer !== 'undefined' && Buffer.from) {
+          // Node.js environment
+          contentBase64 = Buffer.from(contentStr).toString('base64');
+        } else {
+          // Browser environment
+          contentBase64 = btoa(unescape(encodeURIComponent(contentStr)));
+        }
+      }
     } else {
-      // Browser environment
-      contentBase64 = btoa(unescape(encodeURIComponent(contentStr)));
+      throw new Error('Internal error: no content provided'); // Should never reach here due to validation above
     }
 
-    // Build entry data
+    // Build entry data using validated values
     const entryData: any = {
       content_base64: contentBase64,
       mime_type: mimeType,
-      title: input.title,
-      description: input.description,
-      tags: input.tags || [],
-      is_free: input.is_free !== false // default to free
+      tags: tags || [],
+      is_free: is_free !== false // default to free
     };
+    
+    // Only include optional fields if they are defined
+    if (title !== undefined) entryData.title = title;
+    if (description !== undefined) entryData.description = description;
+    if (expires_at !== undefined) entryData.expires_at = expires_at;
 
     if (input.metadata) {
       entryData.metadata = JSON.stringify(input.metadata);
-    }
-
-    if (input.expires_at) {
-      entryData.expires_at = input.expires_at;
     }
 
     if (!input.is_free && input.price) {
@@ -110,14 +192,23 @@ export class EntriesResource {
    * No authentication required
    */
   async list(feedId: string, query?: ListEntriesQuery): Promise<PaginatedResponse<Entry>> {
+    // Validate required feed ID
+    validateRequiredString('feedId', feedId);
+    
     const params = new URLSearchParams();
     
     if (query) {
+      // Validate query parameters - these will throw helpful errors for invalid values
+      const page_token = validateOptionalString('page_token', query.page_token);
+      const is_free = validateOptionalBoolean('is_free', query.is_free);
+      const is_active = validateOptionalBoolean('is_active', query.is_active);
+      const tags = validateOptionalStringArray('tags', query.tags);
+
       if (query.page_size) params.append('page_size', query.page_size.toString());
-      if (query.page_token) params.append('page_token', query.page_token);
-      if (query.is_free !== undefined) params.append('is_free', query.is_free.toString());
-      if (query.is_active !== undefined) params.append('is_active', query.is_active.toString());
-      if (query.tags) query.tags.forEach(tag => params.append('tags', tag));
+      if (page_token) params.append('page_token', page_token);
+      if (is_free !== undefined) params.append('is_free', is_free.toString());
+      if (is_active !== undefined) params.append('is_active', is_active.toString());
+      if (tags) tags.forEach(tag => params.append('tags', tag));
     }
 
     const url = `/v1/feeds/${feedId}/entries${params.toString() ? `?${params.toString()}` : ''}`;

@@ -13,8 +13,15 @@ export default defineConfig({
   define: {
     global: 'globalThis',
   },
+  optimizeDeps: {
+    exclude: ['@grapevine/sdk', '@grapevine/sdk/react'],
+    force: true
+  },
   server: {
-    port: 5173
+    port: 5173,
+    fs: {
+      allow: ['..']
+    }
   },
   build: {
     outDir: 'dist',

@@ -16,12 +16,12 @@ export interface Feed {
   category_id?: string;
   name: string;
   description?: string;
-  image_url?: string;
+  image_cid?: string;  // IPFS CID returned by API after pinning
   is_active: boolean;
   total_entries: number;
   total_purchases: number;
   total_revenue: string;
-  tags: string[];
+  tags: string[] | null;
   created_at: number;
   updated_at: number;
 }
@@ -31,6 +31,11 @@ export interface CreateFeedInput {
   description?: string;
   tags?: string[];
   category_id?: string;
+  // Either provide raw image content (SDK will base64 encode it)
+  image?: string | Blob | File | ArrayBuffer;
+  // OR provide pre-encoded base64 image content
+  image_base64?: string;
+  // OR provide image URL (legacy support)
   image_url?: string;
 }
 
@@ -40,6 +45,11 @@ export interface UpdateFeedInput {
   tags?: string[];
   is_active?: boolean;
   category_id?: string;
+  // Either provide raw image content (SDK will base64 encode it)
+  image?: string | Blob | File | ArrayBuffer;
+  // OR provide pre-encoded base64 image content
+  image_base64?: string;
+  // OR provide image URL (legacy support)
   image_url?: string;
 }
 
@@ -48,21 +58,26 @@ export interface Entry {
   feed_id: string;
   cid: string;
   mime_type: string;
-  title?: string;
-  description?: string;
-  metadata?: string;
-  tags: string[];
+  title?: string | null;
+  description?: string | null;
+  metadata?: string | null;
+  tags: string[] | null;
   is_free: boolean;
-  expires_at?: number;
+  expires_at?: number | null;
   is_active: boolean;
   total_purchases: number;
   total_revenue: string;
+  pinata_upload_id?: string | null;
+  piid?: string | null;
   created_at: number;
   updated_at: number;
 }
 
 export interface CreateEntryInput {
-  content: string | Buffer | object;
+  // Either provide raw content (SDK will base64 encode it)
+  content?: string | Buffer | Blob | File | ArrayBuffer | object;
+  // OR provide pre-encoded base64 content (for advanced users)
+  content_base64?: string;
   mime_type?: string;
   title?: string;
   description?: string;

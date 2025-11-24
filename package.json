@@ -1,6 +1,6 @@
 {
   "name": "@pinata/grapevine-sdk",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Easy-to-use SDK for the Grapevine API - Create and manage content feeds with x402 micropayments",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,7 +15,7 @@
     "test:all": "bun test",
     "example": "bun run examples/basic-usage.ts",
     "prepublishOnly": "bun run build",
-    "test:manual": "cd tests/manual && bun install && bun run dev",
+    "test:manual": "cd tests/manual && rm -rf node_modules && bun install && bun run dev",
     "test:manual:build": "cd tests/manual && bun run build"
   },
   "keywords": [

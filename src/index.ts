@@ -29,3 +29,6 @@ export { FeedsResource } from './resources/feeds.js';
 export { EntriesResource } from './resources/entries.js';
 export { AuthManager } from './auth.js';
 export { PaymentManager } from './payments.js';
+
+// Export validation utilities for error handling
+export { ValidationError } from './validation.js';
