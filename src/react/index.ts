@@ -9,7 +9,6 @@ export type { WalletClient } from 'viem';
 // React hook configuration types
 export type GrapevineHookConfig = {
   walletClient: WalletClient | undefined;
-  address: string | undefined;
   network?: 'testnet' | 'mainnet';
   debug?: boolean;
 };

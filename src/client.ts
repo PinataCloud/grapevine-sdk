@@ -2,7 +2,11 @@ import { AuthManager } from './auth.js';
 import { PaymentManager } from './payments.js';
 import { FeedsResource } from './resources/feeds.js';
 import { EntriesResource } from './resources/entries.js';
-import type { GrapevineConfig, Category } from './types.js';
+import { LeaderboardsResource } from './resources/leaderboards.js';
+import { WalletsResource } from './resources/wallets.js';
+import { TransactionsResource } from './resources/transactions.js';
+import { CategoriesResource } from './resources/categories.js';
+import type { GrapevineConfig } from './types.js';
 import type { WalletAdapter } from './adapters/wallet-adapter.js';
 import { AuthError, ConfigError, ApiError } from './errors.js';
 
@@ -23,6 +27,10 @@ export class GrapevineClient {
 
   public feeds: FeedsResource;
   public entries: EntriesResource;
+  public leaderboards: LeaderboardsResource;
+  public wallets: WalletsResource;
+  public transactions: TransactionsResource;
+  public categories: CategoriesResource;
 
   constructor(config: GrapevineConfig = {}) {
     // Set API URL based on network (default to testnet)
@@ -57,6 +65,10 @@ export class GrapevineClient {
     // Initialize resources
     this.feeds = new FeedsResource(this);
     this.entries = new EntriesResource(this);
+    this.leaderboards = new LeaderboardsResource(this);
+    this.wallets = new WalletsResource(this);
+    this.transactions = new TransactionsResource(this);
+    this.categories = new CategoriesResource(this);
 
     if (this.debug) {
       console.log('GrapevineClient initialized:', {
@@ -196,16 +208,10 @@ export class GrapevineClient {
 
   /**
    * Get list of available categories
+   * @deprecated Use client.categories.list() or client.categories.getAll() instead
    */
-  async getCategories(): Promise<Category[]> {
-    const response = await this.request('/v1/categories', {
-      method: 'GET',
-      requiresAuth: false
-    });
-    
-    const data = await response.json();
-    // API returns { data: Category[], pagination: {...} }
-    return data.data || [];
+  async getCategories(): Promise<import('./types.js').Category[]> {
+    return this.categories.getAll();
   }
 
   /**

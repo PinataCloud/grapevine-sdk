@@ -12,7 +12,7 @@ import {
   validateOptionalString,
   validateOptionalStringArray,
   validateOptionalTimestamp,
-  validateOptionalBoolean
+  validateOptionalBoolean,
 } from '../validation.js';
 import { ContentError, ErrorCode } from '../errors.js';
 
@@ -171,14 +171,10 @@ export class EntriesResource {
       // Validate query parameters - these will throw helpful errors for invalid values
       const page_token = validateOptionalString('page_token', query.page_token);
       const is_free = validateOptionalBoolean('is_free', query.is_free);
-      const is_active = validateOptionalBoolean('is_active', query.is_active);
-      const tags = validateOptionalStringArray('tags', query.tags);
 
       if (query.page_size) params.append('page_size', query.page_size.toString());
       if (page_token) params.append('page_token', page_token);
       if (is_free !== undefined) params.append('is_free', is_free.toString());
-      if (is_active !== undefined) params.append('is_active', is_active.toString());
-      if (tags) tags.forEach(tag => params.append('tags', tag));
     }
 
     const url = `/v1/feeds/${feedId}/entries${params.toString() ? `?${params.toString()}` : ''}`;
@@ -196,7 +192,7 @@ export class EntriesResource {
     return {
       data: entries,
       next_page_token: pagination.next_page_token || undefined,
-      total_count: entries.length // API doesn't provide total_count, use current batch size
+      has_more: pagination.has_more
     };
   }
 

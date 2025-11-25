@@ -62,15 +62,14 @@ console.log(`Entry created: ${entry.id}`);
 
 ```tsx
 import { useGrapevine } from '@pinata/grapevine-sdk/react';
-import { useAccount, useWalletClient } from 'wagmi';
+import { useWalletClient } from 'wagmi';
 
 function MyComponent() {
-  const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
   
+  // Address is automatically extracted from walletClient
   const grapevine = useGrapevine({
     walletClient,
-    address,
     network: 'testnet',
     debug: true
   });
@@ -116,7 +115,8 @@ const grapevine = new GrapevineClient({
 import { GrapevineClient } from '@pinata/grapevine-sdk';
 import { WagmiAdapter } from '@pinata/grapevine-sdk/adapters';
 
-const wagmiAdapter = new WagmiAdapter(walletClient, address);
+// Address is automatically extracted from walletClient.account.address
+const wagmiAdapter = new WagmiAdapter(walletClient);
 const grapevine = new GrapevineClient({
   network: 'testnet',
   walletAdapter: wagmiAdapter
@@ -125,7 +125,6 @@ const grapevine = new GrapevineClient({
 // Or use the React hook (recommended for React apps)
 const grapevine = useGrapevine({
   walletClient,
-  address,
   network: 'testnet'
 });
 ```
@@ -181,7 +180,7 @@ const feed = await grapevine.feeds.create({
 });
 
 // Feed with category (must be valid UUID from /v1/categories)
-const categories = await grapevine.getCategories();
+const categories = await grapevine.categories.getAll();
 const businessCategory = categories.find(c => c.name === 'Business');
 
 const feedWithCategory = await grapevine.feeds.create({
@@ -202,14 +201,19 @@ const feed = await grapevine.feeds.get('feed-id');
 ```typescript
 // List with filters
 const feeds = await grapevine.feeds.list({
-  owner_wallet_address: '0x...',
   tags: ['tech', 'ai'],
   min_entries: 10,
   is_active: true,
   page_size: 20
 });
 
-// Get your own feeds
+// Filter by owner ID (get owner_id from wallet lookup)
+const wallet = await grapevine.wallets.getByAddress('0x...');
+const ownerFeeds = await grapevine.feeds.list({
+  owner_id: wallet.id  // Use owner_id, not wallet address
+});
+
+// Get your own feeds (convenience method)
 const myFeeds = await grapevine.feeds.myFeeds();
 ```
 
@@ -290,7 +294,6 @@ const entry = await grapevine.entries.get('feed-id', 'entry-id');
 ```typescript
 const entries = await grapevine.entries.list('feed-id', {
   is_free: true,
-  tags: ['tutorial'],
   page_size: 50
 });
 ```
@@ -346,7 +349,7 @@ for await (const batch of grapevine.entries.paginate('feed-id', { is_free: true 
 
 ```typescript
 // Get all available categories
-const categories = await grapevine.getCategories();
+const categories = await grapevine.categories.getAll();
 categories.forEach(cat => {
   console.log(`${cat.name} (${cat.id}): ${cat.description}`);
 });
@@ -356,7 +359,7 @@ const businessCategory = categories.find(c => c.name === 'Business');
 if (businessCategory) {
   const categorizedFeed = await grapevine.feeds.create({
     name: 'Business Updates',
-    category_id: businessCategory.id,  // Must be valid UUID from getCategories()
+    category_id: businessCategory.id,  // Must be valid UUID from categories.getAll()
     tags: ['business', 'news']
   });
 }
@@ -639,23 +642,23 @@ The SDK provides React hooks for seamless integration with wagmi-based applicati
 ### useGrapevine Hook
 
 ```tsx
-import { useGrapevine } from '@pinata/grapevine-sdk/react';
-import { useAccount, useWalletClient } from 'wagmi';
+import { useGrapevine, useGrapevineReady } from '@pinata/grapevine-sdk/react';
+import { useWalletClient } from 'wagmi';
 
 function MyApp() {
-  const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
   
+  // Address is automatically extracted from walletClient.account.address
   const grapevine = useGrapevine({
     walletClient,
-    address,
     network: 'testnet',
     debug: true
   });
 
-  // grapevine will be null until wallet is connected
-  // and undefined if there's an error during initialization
-  if (!grapevine) {
+  const isReady = useGrapevineReady(grapevine);
+
+  // grapevine will be null until initialized
+  if (!isReady) {
     return <div>Connect your wallet to get started</div>;
   }
 
@@ -667,24 +670,24 @@ function MyApp() {
 
 ```tsx
 import React, { useState, useEffect } from 'react';
-import { useGrapevine } from '@pinata/grapevine-sdk/react';
-import { useAccount, useWalletClient } from 'wagmi';
+import { useGrapevine, useGrapevineReady } from '@pinata/grapevine-sdk/react';
+import { useWalletClient } from 'wagmi';
 
 function FeedManager() {
-  const { address } = useAccount();
   const { data: walletClient } = useWalletClient();
   
   const grapevine = useGrapevine({
     walletClient,
-    address,
     network: 'testnet'
   });
+  
+  const isReady = useGrapevineReady(grapevine);
   
   const [feeds, setFeeds] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const loadMyFeeds = async () => {
-    if (!grapevine) return;
+    if (!grapevine || !isReady) return;
     
     setLoading(true);
     try {
@@ -698,7 +701,7 @@ function FeedManager() {
   };
 
   const createFeed = async () => {
-    if (!grapevine) return;
+    if (!grapevine || !isReady) return;
     
     setLoading(true);
     try {
@@ -716,12 +719,12 @@ function FeedManager() {
   };
 
   useEffect(() => {
-    if (grapevine) {
+    if (isReady) {
       loadMyFeeds();
     }
-  }, [grapevine]);
+  }, [isReady]);
 
-  if (!grapevine) {
+  if (!isReady) {
     return <div>Connect your wallet to manage feeds</div>;
   }
 
@@ -747,10 +750,25 @@ function FeedManager() {
 
 ## Advanced Usage
 
-### Custom Network Configuration
+### Network Configuration
+
+The SDK automatically sets the API URL based on the `network` option:
+
+| Network | API URL | Chain |
+|---------|---------|-------|
+| `testnet` | https://api.grapevine.markets | Base Sepolia (84532) |
+| `mainnet` | https://api.grapevine.fyi | Base (8453) |
+
 ```typescript
-const grapevine = new GrapevineClient({
-  apiUrl: 'https://custom-api.example.com',
+// Testnet (default)
+const testnetClient = new GrapevineClient({
+  network: 'testnet',  // Uses https://api.grapevine.markets
+  privateKey: '0x...'
+});
+
+// Mainnet
+const mainnetClient = new GrapevineClient({
+  network: 'mainnet',  // Uses https://api.grapevine.fyi
   privateKey: '0x...'
 });
 ```
