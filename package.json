@@ -1,6 +1,6 @@
 {
   "name": "@pinata/grapevine-sdk",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Easy-to-use SDK for the Grapevine API - Create and manage content feeds with x402 micropayments",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
