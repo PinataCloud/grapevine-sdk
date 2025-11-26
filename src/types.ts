@@ -301,8 +301,8 @@ export interface TrendingFeed {
 
 export interface PopularFeed {
   rank: string;
-  feed_id: string;
-  feed_name: string;
+  id: string;
+  feed: string;
   owner_id: string;
   owner_username?: string | null;
   owner_wallet: string;
@@ -324,8 +324,8 @@ export interface PopularFeed {
 // Note: TopRevenueFeed is very similar to PopularFeed but has different timestamps
 export interface TopRevenueFeed {
   rank: string;
-  feed_id: string;
-  feed_name: string;
+  id: string;
+  feed: string;
   owner_id: string;
   owner_username?: string | null;
   owner_wallet: string;

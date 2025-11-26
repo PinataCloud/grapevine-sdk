@@ -95,7 +95,7 @@ export class FeedsResource {
       if (category) params.append('category', category);
       // API expects tags as comma-separated string
       if (tags && tags.length > 0) params.append('tags', tags.join(','));
-      if (query.min_entries) params.append('min_entries', query.min_entries.toString());
+      if (query.min_entries !== undefined) params.append('min_entries', query.min_entries.toString());
       if (query.min_age) params.append('min_age', query.min_age.toString());
       if (query.max_age) params.append('max_age', query.max_age.toString());
       if (is_active !== undefined) params.append('is_active', is_active.toString());

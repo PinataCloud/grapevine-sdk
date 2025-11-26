@@ -78,11 +78,11 @@ describe('Leaderboards Resource', () => {
   });
 
   describe('PopularFeed Type', () => {
-    test('has feed_name and unique_buyers', () => {
+    test('has feed and unique_buyers', () => {
       const feed: PopularFeed = {
         rank: '1',
-        feed_id: '123e4567-e89b-12d3-a456-426614174000',
-        feed_name: 'Popular Feed',
+        id: '123e4567-e89b-12d3-a456-426614174000',
+        feed: 'Popular Feed',
         owner_id: '123e4567-e89b-12d3-a456-426614174001',
         owner_wallet: '0x1234',
         category_name: 'Business',
@@ -95,7 +95,7 @@ describe('Leaderboards Resource', () => {
         updated_at: 1234567890
       };
       
-      expect(feed.feed_name).toBe('Popular Feed');
+      expect(feed.feed).toBe('Popular Feed');
       expect(feed.unique_buyers).toBe('50');
     });
   });
