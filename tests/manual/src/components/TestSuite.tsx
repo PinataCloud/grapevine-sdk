@@ -566,41 +566,39 @@ export default function TestSuite() {
       }
     },
     {
-      id: 'create-feed-data-url-rejected',
-      name: 'Create Feed (Data URL - Should Be Rejected)',
-      description: 'SDK should reject data URLs since API only supports HTTP/HTTPS URLs',
+      id: 'create-feed-base64',
+      name: 'Create Feed (Base64 Image)',
+      description: 'Create feed with base64 encoded image (loads test file)',
       category: 'Image Validation',
       test: async (client) => {
-        const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
-        try {
-          await client.feeds.create({
-            name: `Test Feed Data URL ${Date.now()}`,
-            description: 'This should be rejected - data URLs not supported',
-            tags: ['test', 'image', 'data-url', authMode],
-            image_url: dataUrl
-          });
-          throw new Error('Expected SDK to reject data URL but feed was created');
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          // SDK should reject data URLs with a helpful error
-          if (errorMessage.includes('Data URLs are not supported')) {
-            return {
-              expectedFailure: true,
-              validationMessage: errorMessage,
-              validationType: 'data-url-rejected',
-              message: 'SDK correctly rejected data URL with helpful error message'
-            };
-          }
-          // If server returned 500, that's also expected (data URLs crash the API)
-          if (errorMessage.includes('500')) {
-            return {
-              expectedFailure: true,
-              validationMessage: errorMessage,
-              message: 'API crashed on data URL - SDK should validate this client-side'
-            };
-          }
-          throw error;
+        // Load the test image file and convert to base64
+        const response = await fetch('/test-files/test-image.jpg');
+        if (!response.ok) {
+          throw new Error('Failed to load test image file. Make sure test-files/test-image.jpg exists.');
         }
+        const arrayBuffer = await response.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+        
+        const feed = await client.feeds.create({
+          name: `Test Feed Base64 ${Date.now()}`,
+          description: 'Testing base64 image upload from real file',
+          tags: ['test', 'image', 'base64', authMode],
+          image_url: base64
+        });
+        return {
+          feedId: feed.id,
+          imageType: 'raw-base64',
+          hasImage: !!feed.image_cid,
+          imageSize: `${Math.round(base64.length / 1024)} KB`,
+          message: feed.image_cid 
+            ? 'Successfully created feed with base64 image' 
+            : 'Feed created but no image_cid returned'
+        };
       }
     },
     {

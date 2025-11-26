@@ -147,8 +147,8 @@ describe('SDK End-to-End Tests', () => {
         return;
       }
       
-      const feeds = await client.feeds.list({
-        owner_wallet_address: client.getWalletAddress(),
+      // Use myFeeds() to get feeds owned by the authenticated wallet
+      const feeds = await client.feeds.myFeeds({
         page_size: 50
       });
       

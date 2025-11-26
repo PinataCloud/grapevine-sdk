@@ -32,14 +32,23 @@ export interface CreateFeedInput {
   tags?: string[];
   category_id?: string;
   /**
-   * Image URL - must be a publicly accessible HTTP/HTTPS URL.
-   * The API will fetch and store the image, returning an `image_cid`.
+   * Image for the feed. Supports multiple formats:
    * 
-   * Note: Data URLs and base64 content are NOT supported by the API.
-   * Use a service like Pinata, Cloudinary, or S3 to host your image first.
+   * 1. HTTP/HTTPS URL - A publicly accessible image URL
+   * 2. Base64 Data URL - Inline image data (e.g., 'data:image/jpeg;base64,...')
+   * 3. Raw Base64 - Just the base64 encoded image data
+   * 
+   * The API will process the image and return an `image_cid`.
    * 
    * @example
+   * // HTTP URL
    * image_url: 'https://example.com/my-image.png'
+   * 
+   * // Base64 Data URL
+   * image_url: 'data:image/jpeg;base64,/9j/4AAQSkZ...'
+   * 
+   * // Raw Base64
+   * image_url: '/9j/4AAQSkZ...'
    */
   image_url?: string;
 }
@@ -51,14 +60,23 @@ export interface UpdateFeedInput {
   is_active?: boolean;
   category_id?: string;
   /**
-   * Image URL - must be a publicly accessible HTTP/HTTPS URL.
-   * The API will fetch and store the image, returning an `image_cid`.
+   * Image for the feed. Supports multiple formats:
    * 
-   * Note: Data URLs and base64 content are NOT supported by the API.
-   * Use a service like Pinata, Cloudinary, or S3 to host your image first.
+   * 1. HTTP/HTTPS URL - A publicly accessible image URL
+   * 2. Base64 Data URL - Inline image data (e.g., 'data:image/jpeg;base64,...')
+   * 3. Raw Base64 - Just the base64 encoded image data
+   * 
+   * The API will process the image and return an `image_cid`.
    * 
    * @example
+   * // HTTP URL
    * image_url: 'https://example.com/my-image.png'
+   * 
+   * // Base64 Data URL
+   * image_url: 'data:image/jpeg;base64,/9j/4AAQSkZ...'
+   * 
+   * // Raw Base64
+   * image_url: '/9j/4AAQSkZ...'
    */
   image_url?: string;
 }

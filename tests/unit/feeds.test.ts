@@ -12,7 +12,6 @@ import {
   validateRequiredString, 
   validateOptionalString,
   validateOptionalUUID,
-  validateOptionalURL,
   validateOptionalStringArray 
 } from '../../src/validation.js';
 
@@ -65,21 +64,23 @@ describe('Feeds Resource', () => {
       expect(validateOptionalUUID('category_id', null)).toBeUndefined();
     });
 
-    test('image_url must be valid URL format', () => {
-      expect(() => validateOptionalURL('image_url', 'not-a-url')).toThrow();
-      expect(() => validateOptionalURL('image_url', '')).toThrow();
+    test('image_url rejects empty string', () => {
+      expect(() => validateOptionalString('image_url', '')).toThrow();
     });
 
     test('image_url accepts http URLs', () => {
-      expect(validateOptionalURL('image_url', 'https://example.com/image.png')).toBe('https://example.com/image.png');
+      expect(validateOptionalString('image_url', 'https://example.com/image.png')).toBe('https://example.com/image.png');
     });
 
-    test('image_url validator accepts data URLs (but SDK rejects them)', () => {
-      // Note: The URL validator accepts data URLs as valid URL format,
-      // but the SDK's feeds.create() method rejects them because
-      // the API only supports HTTP/HTTPS URLs for fetching images.
+    test('image_url accepts data URLs', () => {
       const dataUrl = 'data:image/png;base64,iVBORw0KGgo=';
-      expect(validateOptionalURL('image_url', dataUrl)).toBe(dataUrl);
+      expect(validateOptionalString('image_url', dataUrl)).toBe(dataUrl);
+    });
+
+    test('image_url accepts raw base64', () => {
+      // Raw base64 without data URL prefix - API supports this
+      const rawBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+      expect(validateOptionalString('image_url', rawBase64)).toBe(rawBase64);
     });
 
     test('tags must be array of strings', () => {

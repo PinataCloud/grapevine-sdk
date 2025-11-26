@@ -22,7 +22,8 @@ describe('Runtime Compatibility Tests', () => {
     it('should handle dynamic imports', async () => {
       const module = await import('../../src/index.js');
       expect(module.GrapevineClient).toBeDefined();
-      expect(module.default).toBe(module.GrapevineClient);
+      // SDK uses named exports only, no default export
+      expect(typeof module.GrapevineClient).toBe('function');
     });
 
     it('should export all expected modules', async () => {

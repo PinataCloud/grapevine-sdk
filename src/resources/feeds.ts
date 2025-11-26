@@ -11,11 +11,9 @@ import {
   validateRequiredString,
   validateOptionalString,
   validateOptionalUUID,
-  validateOptionalURL,
   validateOptionalStringArray,
   validateOptionalBoolean
 } from '../validation.js';
-import { ConfigError, ErrorCode } from '../errors.js';
 
 export class FeedsResource {
   constructor(private client: GrapevineClient) {}
@@ -25,11 +23,14 @@ export class FeedsResource {
    * Automatically handles authentication and payment
    * 
    * @param input - Feed creation data
-   * @param input.image_url - HTTP/HTTPS URL to publicly accessible image
+   * @param input.image_url - Image for the feed
    * 
-   * Note: The API only supports HTTP/HTTPS URLs for images.
-   * The server will fetch the image and return an image_cid.
-   * Data URLs and base64 content are NOT supported.
+   * Supports:
+   * - HTTP/HTTPS URLs to publicly accessible images
+   * - Base64 data URLs (e.g., 'data:image/jpeg;base64,...')
+   * - Raw base64 encoded image data
+   * 
+   * The server will process the image and return an image_cid.
    */
   async create(input: CreateFeedInput): Promise<Feed> {
     // Validate required fields
@@ -40,37 +41,8 @@ export class FeedsResource {
     const category_id = validateOptionalUUID('category_id', input.category_id, 'category');
     const tags = validateOptionalStringArray('tags', input.tags);
     
-    // Validate image_url is a proper HTTP/HTTPS URL (not data URL)
-    let image_url: string | undefined;
-    if (input.image_url) {
-      // Validate it's a proper URL
-      image_url = validateOptionalURL('image_url', input.image_url);
-      
-      // Ensure it's HTTP/HTTPS, not a data URL
-      if (image_url && image_url.startsWith('data:')) {
-        throw new ConfigError(
-          'Data URLs are not supported for images',
-          ErrorCode.CONFIG_INVALID,
-          {
-            suggestion: 'Use an HTTP/HTTPS URL to a publicly accessible image',
-            example: `// ✅ Use HTTP/HTTPS URLs
-{
-  name: 'My Feed',
-  image_url: 'https://example.com/image.png'
-}
-
-// ❌ Data URLs are NOT supported
-{
-  name: 'My Feed',
-  image_url: 'data:image/png;base64,...'  // This will fail
-}`,
-            context: {
-              providedValue: image_url.substring(0, 50) + '...'
-            }
-          }
-        );
-      }
-    }
+    // image_url accepts URLs or raw base64 - just validate it's a non-empty string
+    const image_url = validateOptionalString('image_url', input.image_url);
     
     // Build validated payload (only include defined values)
     const validatedInput: any = { name };
@@ -152,9 +124,12 @@ export class FeedsResource {
    * Update an existing feed
    * Requires authentication and ownership
    * 
-   * @param input.image_url - HTTP/HTTPS URL to publicly accessible image
+   * @param input.image_url - Image for the feed
    * 
-   * Note: The API only supports HTTP/HTTPS URLs for images.
+   * Supports:
+   * - HTTP/HTTPS URLs to publicly accessible images
+   * - Base64 data URLs (e.g., 'data:image/jpeg;base64,...')
+   * - Raw base64 encoded image data
    */
   async update(feedId: string, input: UpdateFeedInput): Promise<Feed> {
     // Validate feed ID
@@ -167,22 +142,8 @@ export class FeedsResource {
     const tags = validateOptionalStringArray('tags', input.tags);
     const is_active = validateOptionalBoolean('is_active', input.is_active);
     
-    // Validate image_url is a proper HTTP/HTTPS URL (not data URL)
-    let image_url: string | undefined;
-    if (input.image_url) {
-      image_url = validateOptionalURL('image_url', input.image_url);
-      
-      if (image_url && image_url.startsWith('data:')) {
-        throw new ConfigError(
-          'Data URLs are not supported for images',
-          ErrorCode.CONFIG_INVALID,
-          {
-            suggestion: 'Use an HTTP/HTTPS URL to a publicly accessible image',
-            example: `image_url: 'https://example.com/image.png'`
-          }
-        );
-      }
-    }
+    // image_url accepts URLs or raw base64 - just validate it's a non-empty string
+    const image_url = validateOptionalString('image_url', input.image_url);
     
     // Build validated payload (only include defined values)
     const validatedInput: any = {};

@@ -28,7 +28,7 @@ describe('Feeds API Integration (Live)', () => {
       
       expect(response).toBeDefined();
       expect(response.data).toBeInstanceOf(Array);
-      expect(typeof response.total_count).toBe('number');
+      expect(typeof response.has_more).toBe('boolean');
       expect(response.next_page_token === undefined || typeof response.next_page_token === 'string').toBe(true);
       
       if (response.data.length > 0) {
@@ -45,10 +45,10 @@ describe('Feeds API Integration (Live)', () => {
       const response = await client.feeds.list({ page_size: 5 });
       
       expect(response.data.length).toBeLessThanOrEqual(5);
-      expect(typeof response.total_count).toBe('number');
+      expect(typeof response.has_more).toBe('boolean');
       
-      // If there are more than 5 feeds total, should have next_page_token
-      if (response.data.length === 5) {
+      // If there are more feeds and we got a full page, should have next_page_token
+      if (response.has_more && response.data.length === 5) {
         expect(typeof response.next_page_token).toBe('string');
       }
     });
@@ -106,7 +106,7 @@ describe('Feeds API Integration (Live)', () => {
         allFeeds.push(...response.data);
         
         // Validate response structure
-        expect(typeof response.total_count).toBe('number');
+        expect(typeof response.has_more).toBe('boolean');
         expect(response.next_page_token === undefined || typeof response.next_page_token === 'string').toBe(true);
         
         hasMorePages = !!response.next_page_token;
@@ -133,7 +133,7 @@ describe('Feeds API Integration (Live)', () => {
       const response = await client.feeds.list({ page_size: 100 });
       
       expect(response.data).toBeInstanceOf(Array);
-      expect(typeof response.total_count).toBe('number');
+      expect(typeof response.has_more).toBe('boolean');
       expect(response.data.length).toBeLessThanOrEqual(100);
       expect(response.next_page_token === undefined || typeof response.next_page_token === 'string').toBe(true);
     });
