@@ -89,7 +89,7 @@ export default function WagmiTest() {
       const response = await grapevine.feeds.list({ page_size: 5 });
       addResult('success', 'Feeds loaded via wagmi', { 
         count: response.data.length, 
-        total: response.total_count,
+        hasMore: response.has_more,
         feeds: response.data
       });
     } catch (err) {

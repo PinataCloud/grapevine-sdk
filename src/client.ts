@@ -140,7 +140,10 @@ export class GrapevineClient {
   }
 
   /**
-   * Make an authenticated request to the API
+   * Make a request to the API
+   * 
+   * Auth is handled lazily - only triggered when API returns 401.
+   * This minimizes signature popups to only when truly required.
    */
   async request(path: string, options: RequestOptions): Promise<Response> {
     const url = `${this.apiUrl}${path}`;
@@ -153,39 +156,45 @@ export class GrapevineClient {
       'Content-Type': 'application/json'
     };
 
-    let authHeaders: any = {};
-    
-    // Add auth headers if required
-    if (options.requiresAuth) {
-      if (!this.authManager) {
-        throw AuthError.noWallet();
-      }
-      authHeaders = await this.authManager.getAuthHeaders();
-      Object.assign(headers, authHeaders);
-    }
-
-    // Make the request
+    // Make the initial request without auth
     let response = await fetch(url, {
       method: options.method,
       headers,
       body: options.body
     });
 
-    // Handle payment if required and configured
-    if (response.status === 402 && options.handlePayment && this.paymentManager) {
-      if (this.debug) {
-        console.log('Handling 402 payment required');
+    // Handle 401 - auth required (lazy auth)
+    if (response.status === 401 && options.requiresAuth) {
+      if (!this.authManager) {
+        throw AuthError.noWallet();
+      }
+      
+      const authHeaders = await this.authManager.getAuthHeaders();
+      
+      response = await fetch(url, {
+        method: options.method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders
+        },
+        body: options.body
+      });
+    }
+
+    // Handle 402 - payment required
+    if (response.status === 402 && options.handlePayment) {
+      if (!this.paymentManager) {
+        throw AuthError.noWalletForPayment();
       }
       
       // Create payment header
       const paymentHeader = await this.paymentManager.createPaymentHeader(response);
       
-      // Retry with payment using original auth headers (no additional signature needed)
+      // Retry with payment
       response = await fetch(url, {
         method: options.method,
         headers: {
           'Content-Type': 'application/json',
-          ...authHeaders, // Reuse original auth headers
           'X-PAYMENT': paymentHeader,
           'Access-Control-Expose-Headers': 'X-PAYMENT-RESPONSE'
         },

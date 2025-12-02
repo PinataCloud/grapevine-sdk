@@ -34,9 +34,17 @@ export class AuthManager {
     }
   }
 
+  /**
+   * Get auth headers for a request
+   * 
+   * NOTE: The API uses one-time-use nonces, so each call to this method
+   * will fetch a fresh nonce and require a signature. For browser wallets,
+   * this means a signature popup for each auth-requiring operation.
+   */
   async getAuthHeaders(): Promise<AuthHeaders> {
-    // Request nonce from API
     const walletAddress = this.walletAdapter.getAddress();
+    
+    // Request fresh nonce from API (nonces are one-time use)
     const nonceResponse = await fetch(`${this.apiUrl}/v1/auth/nonce`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -50,7 +58,7 @@ export class AuthManager {
     const responseData = await nonceResponse.json() as { message: string };
     const { message } = responseData;
     
-    // Sign the message
+    // Sign the message - this triggers wallet popup for browser wallets
     const signature = await this.walletAdapter.signMessage(message);
     
     return {

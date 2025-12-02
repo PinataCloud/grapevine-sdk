@@ -285,6 +285,27 @@ const grapevine = new GrapevineClient({
   }
 
   /**
+   * Create error for missing wallet when payment is required
+   */
+  static noWalletForPayment(): AuthError {
+    return new AuthError(
+      'No wallet configured - a wallet is required to pay for this operation',
+      ErrorCode.AUTH_NO_WALLET,
+      {
+        suggestion: 'Configure a wallet to enable payments for feed/entry creation',
+        example: `// Configure a wallet before creating feeds or entries
+const grapevine = new GrapevineClient({
+  privateKey: '0x...',
+  network: 'testnet'
+});
+
+// Now you can create feeds (payment will be handled automatically)
+await grapevine.feeds.create({ name: 'My Feed' });`
+      }
+    );
+  }
+
+  /**
    * Create error for invalid private key
    */
   static invalidPrivateKey(key?: string): AuthError {

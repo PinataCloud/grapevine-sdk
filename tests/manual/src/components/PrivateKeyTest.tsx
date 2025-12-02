@@ -85,7 +85,7 @@ export default function PrivateKeyTest() {
       const response = await client.feeds.list({ page_size: 5 });
       addResult('success', 'Feeds loaded', { 
         count: response.data.length, 
-        total: response.total_count,
+        hasMore: response.has_more,
         feeds: response.data
       });
     } catch (err) {

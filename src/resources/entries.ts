@@ -137,7 +137,7 @@ export class EntriesResource {
     const response = await this.client.request(`/v1/feeds/${feedId}/entries`, {
       method: 'POST',
       body: JSON.stringify(entryData),
-      requiresAuth: true,
+      requiresAuth: false,
       handlePayment: true
     });
 

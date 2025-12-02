@@ -971,7 +971,7 @@ export default function TestSuite() {
           period: '7 days',
           topFeeds: response.data.slice(0, 3).map(feed => ({
             rank: feed.rank,
-            name: feed.feed_name,
+            name: feed.feed,
             owner: feed.owner_wallet,
             totalPurchases: feed.total_purchases,
             uniqueBuyers: feed.unique_buyers
@@ -1097,7 +1097,7 @@ export default function TestSuite() {
           period: '30 days',
           topFeeds: response.data.slice(0, 3).map(feed => ({
             rank: feed.rank,
-            name: feed.feed_name,
+            name: feed.feed,
             owner: feed.owner_wallet,
             totalRevenue: feed.total_revenue,
             uniqueBuyers: feed.unique_buyers
@@ -1285,6 +1285,91 @@ export default function TestSuite() {
             payer: tx.payer?.substring(0, 8) + '...',
             createdAt: new Date(tx.created_at * 1000).toLocaleDateString()
           }))
+        };
+      }
+    },
+    // ============================================================
+    // AUTH FLOW TESTS - Verify minimal signature popups
+    // ============================================================
+    {
+      id: 'auth-read-no-auth',
+      name: 'Read Operations (No Auth)',
+      description: 'Verify read operations work without any authentication prompts',
+      category: 'Auth Flow',
+      test: async (client) => {
+        const feeds = await client.feeds.list({ page_size: 1 });
+        const categories = await client.categories.list();
+        const leaderboard = await client.leaderboards.trending();
+        return {
+          feedsCount: feeds.data.length,
+          categoriesCount: categories.data.length,
+          leaderboardCount: leaderboard.data.length,
+          message: '✅ All read operations completed without auth prompts'
+        };
+      }
+    },
+    {
+      id: 'auth-create-payment-only',
+      name: 'Create Feed (Payment Only)',
+      description: 'Feed creation should only require payment signature, NOT nonce auth',
+      category: 'Auth Flow',
+      test: async (client) => {
+        if (!client.hasWallet()) throw new Error('Wallet required');
+        const feed = await client.feeds.create({
+          name: `Auth Test ${Date.now()}`,
+          description: 'Testing payment-only auth'
+        });
+        return {
+          feedId: feed.id,
+          message: '✅ Created with payment only - no nonce auth',
+          warning: 'If you saw "Sign into Grapevine" popup, there is a bug!'
+        };
+      }
+    },
+    {
+      id: 'auth-update-lazy',
+      name: 'Update Feed (Lazy Auth)',
+      description: 'Update uses lazy auth: tries without auth, retries with auth on 401',
+      category: 'Auth Flow',
+      test: async (client, currentFeedId) => {
+        if (!client.hasWallet()) throw new Error('Wallet required');
+        if (!currentFeedId) throw new Error('Run "Create Feed" first');
+        const updated = await client.feeds.update(currentFeedId, {
+          description: `Updated ${new Date().toISOString()}`
+        });
+        return {
+          feedId: updated.id,
+          message: '✅ Updated with lazy auth (401 → nonce → retry)',
+          note: 'One "Sign into Grapevine" popup is expected'
+        };
+      }
+    },
+    {
+      id: 'auth-my-feeds',
+      name: 'myFeeds() (Public Lookup)',
+      description: 'myFeeds() uses public wallet lookup, not nonce auth',
+      category: 'Auth Flow',
+      test: async (client) => {
+        if (!client.hasWallet()) throw new Error('Wallet required');
+        const feeds = await client.feeds.myFeeds();
+        return {
+          feedCount: feeds.data.length,
+          message: '✅ myFeeds() completed without auth prompts',
+          warning: 'If you saw "Sign into Grapevine" popup, there is a bug!'
+        };
+      }
+    },
+    {
+      id: 'auth-summary',
+      name: 'Auth Requirements Summary',
+      description: 'Reference: which operations require what auth type',
+      category: 'Auth Flow',
+      test: async () => {
+        return {
+          noAuth: ['list', 'get', 'myFeeds', 'leaderboards', 'transactions'],
+          paymentOnly: ['feeds.create', 'entries.create', 'batchCreate'],
+          nonceAuth: ['update', 'delete', 'createAccessLink'],
+          note: 'API uses one-time nonces - each update/delete needs fresh signature'
         };
       }
     }

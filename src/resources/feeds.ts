@@ -54,7 +54,7 @@ export class FeedsResource {
     const response = await this.client.request('/v1/feeds', {
       method: 'POST',
       body: JSON.stringify(validatedInput),
-      requiresAuth: true,
+      requiresAuth: false,
       handlePayment: true
     });
 
