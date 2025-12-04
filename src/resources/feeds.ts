@@ -20,7 +20,7 @@ export class FeedsResource {
 
   /**
    * Create a new feed
-   * Automatically handles authentication and payment
+   * Automatically handles authentication
    * 
    * @param input - Feed creation data
    * @param input.image_url - Image for the feed
@@ -54,8 +54,7 @@ export class FeedsResource {
     const response = await this.client.request('/v1/feeds', {
       method: 'POST',
       body: JSON.stringify(validatedInput),
-      requiresAuth: false,
-      handlePayment: true
+      requiresAuth: true
     });
 
     return response.json();

@@ -21,7 +21,7 @@ export class EntriesResource {
 
   /**
    * Create a new entry in a feed
-   * Automatically handles authentication, payment, and content encoding
+   * Automatically handles authentication and content encoding
    */
   async create(feedId: string, input: CreateEntryInput): Promise<Entry> {
     // Validate required fields
@@ -137,8 +137,7 @@ export class EntriesResource {
     const response = await this.client.request(`/v1/feeds/${feedId}/entries`, {
       method: 'POST',
       body: JSON.stringify(entryData),
-      requiresAuth: false,
-      handlePayment: true
+      requiresAuth: true
     });
 
     return response.json();
